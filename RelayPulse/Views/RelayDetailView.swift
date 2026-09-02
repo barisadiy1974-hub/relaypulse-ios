@@ -1,60 +1,89 @@
 import SwiftUI
 
 struct RelayDetailView: View {
-    let server: Server
     @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
+    let server: Server
+    @State private var showEdit = false
 
     private var status: RelayStatus { fleet.status(for: server) }
+    private var sc: Color { status.state.color(scheme) }
 
     var body: some View {
-        List {
-            Section("Durum") {
-                row("Durum") {
-                    HStack(spacing: 6) {
-                        Circle().fill(status.state.color).frame(width: 9, height: 9)
-                        Text(status.state.label).foregroundStyle(status.state.color)
+        ScrollView {
+            VStack(spacing: 10) {
+                PanelCard(stateColor: sc) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Circle().fill(sc).frame(width: 10, height: 10)
+                            Text(status.state.label).font(.headline).foregroundStyle(sc)
+                            Spacer()
+                            Text(status.ageText + " önce").font(.caption).foregroundStyle(Theme.muted(scheme))
+                        }
+                        if status.fails > 0 {
+                            Text("\(status.fails) ardışık başarısız poll").font(.caption).foregroundStyle(Theme.warn(scheme))
+                        }
+                        if let e = status.lastError {
+                            Text(e).font(.caption).foregroundStyle(Theme.err(scheme))
+                        }
                     }
                 }
-                row("anon servisi") { Text(status.anonLabel) }
-                if status.fails > 0 { row("Ardışık hata") { Text("\(status.fails)") } }
-                if let e = status.lastError { row("Son hata") { Text(e).foregroundStyle(.red) } }
-                row("Güncelleme") { Text(status.ageText + " önce") }
-            }
 
-            Section("Metrikler") {
-                row("Bağlantı") { Text(status.conn.map { "\($0)" } ?? "—") }
-                row("İndirme") { Text(mbps(status.rxMbps)) }
-                row("Yükleme") { Text(mbps(status.txMbps)) }
-                row("CPU") { Text(status.cpuPct.map { "\(Int($0))%" } ?? "—") + Text(status.cpuCount.map { " (\($0) çekirdek)" } ?? "") }
-                row("RAM") { Text(status.memPct.map { "\(Int($0))%" } ?? "—") }
-                row("Disk") { Text(status.diskPct.map { "\(Int($0))%" } ?? "—") }
-                if let l = status.load, l.count == 3 {
-                    row("Yük ort.") { Text(String(format: "%.2f  %.2f  %.2f", l[0], l[1], l[2])) }
-                }
-                row("Uptime") { Text(status.uptime ?? "—") }
-            }
+                infoCard("Metrikler", [
+                    ("anon servisi", status.anonLabel),
+                    ("Bağlantı", status.conn.map { "\($0)" } ?? "—"),
+                    ("İndirme", mbps(status.rxMbps)),
+                    ("Yükleme", mbps(status.txMbps)),
+                    ("CPU", (status.cpuPct.map { "\(Int($0))%" } ?? "—") + (status.cpuCount.map { " · \($0) çekirdek" } ?? "")),
+                    ("RAM", status.memPct.map { "\(Int($0))%" } ?? "—"),
+                    ("Disk", status.diskPct.map { "\(Int($0))%" } ?? "—"),
+                    ("Yük ort.", status.load.map { l in l.count == 3 ? String(format: "%.2f  %.2f  %.2f", l[0], l[1], l[2]) : "—" } ?? "—"),
+                    ("Uptime", status.uptime ?? "—"),
+                ])
 
-            Section("Sunucu") {
-                row("Host") { Text("\(server.host):\(server.agentPort)") }
-                row("Şema") { Text(server.agentScheme.uppercased()) }
-                row("Public IP") { Text(status.publicIp ?? "—") }
-                if !server.wallet.isEmpty {
-                    row("Cüzdan") { Text(server.wallet).font(.caption).lineLimit(1).truncationMode(.middle) }
-                }
+                infoCard("Sunucu", [
+                    ("Host", "\(server.host):\(server.agentPort)"),
+                    ("Şema", server.agentScheme.uppercased()),
+                    ("Public IP", status.publicIp ?? "—"),
+                    ("Cüzdan", server.wallet.isEmpty ? "—" : server.wallet),
+                ])
             }
+            .padding(12)
         }
+        .background(Theme.bg(scheme))
         .navigationTitle(server.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Düzenle") { showEdit = true }
+            }
+        }
+        .sheet(isPresented: $showEdit) { ServerEditView(mode: .edit(server)) }
         .refreshable { await fleet.sweep() }
     }
 
-    private func row<V: View>(_ label: String, @ViewBuilder _ value: () -> V) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            value().multilineTextAlignment(.trailing)
+    private func infoCard(_ title: String, _ rows: [(String, String)]) -> some View {
+        PanelCard {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title.uppercased())
+                    .font(.system(size: 11, weight: .semibold)).tracking(0.5)
+                    .foregroundStyle(Theme.muted(scheme))
+                    .padding(.bottom, 6)
+                ForEach(rows.indices, id: \.self) { i in
+                    HStack {
+                        Text(rows[i].0).foregroundStyle(Theme.muted(scheme))
+                        Spacer()
+                        Text(rows[i].1)
+                            .foregroundStyle(Theme.text(scheme))
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    .font(.system(size: 13))
+                    .padding(.vertical, 5)
+                    if i < rows.count - 1 { Divider().overlay(Theme.border(scheme)) }
+                }
+            }
         }
-        .font(.callout)
     }
 
     private func mbps(_ v: Double?) -> String {

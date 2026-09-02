@@ -8,22 +8,22 @@ enum RelayState: String {
     case offline         // OFFLINE_AFTER+ ardisik basarisiz
     case unknown         // henuz hic pollanmadi
 
-    var color: Color {
+    func color(_ s: ColorScheme) -> Color {
         switch self {
-        case .online:  return .green
-        case .warn:    return .orange
-        case .stale:   return .yellow
-        case .offline: return .red
-        case .unknown: return .gray
+        case .online:  return Theme.ok(s)
+        case .warn:    return Theme.warn(s)
+        case .stale:   return Theme.warn(s)
+        case .offline: return Theme.err(s)
+        case .unknown: return Theme.muted(s)
         }
     }
 
     var label: String {
         switch self {
-        case .online:  return "Online"
-        case .warn:    return "Uyari"
-        case .stale:   return "Sarkiyor"
-        case .offline: return "Cevrimdisi"
+        case .online:  return "Çevrimiçi"
+        case .warn:    return "Uyarı"
+        case .stale:   return "Sarkıyor"
+        case .offline: return "Çevrimdışı"
         case .unknown: return "Bekleniyor"
         }
     }

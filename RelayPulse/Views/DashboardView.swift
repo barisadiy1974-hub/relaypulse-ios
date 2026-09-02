@@ -1,79 +1,82 @@
 import SwiftUI
 
+/// Röleler sekmesi — filo özeti + filtre + relay kart listesi.
 struct DashboardView: View {
     @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
     @State private var query = ""
     @State private var filter: RelayFilter = .all
-    @State private var showSettings = false
+    @State private var showAdd = false
 
     enum RelayFilter: String, CaseIterable {
-        case all = "Hepsi", issues = "Sorunlu", online = "Online"
+        case all = "Tümü", issues = "Sorunlu", online = "Çevrimiçi"
     }
 
     private var visible: [Server] {
         fleet.servers.filter { s in
             let st = fleet.status(for: s)
-            let matchesQuery = query.isEmpty
+            let q = query.isEmpty
                 || s.name.localizedCaseInsensitiveContains(query)
                 || s.host.localizedCaseInsensitiveContains(query)
-            let matchesFilter: Bool = {
+            let f: Bool = {
                 switch filter {
                 case .all: return true
                 case .online: return st.state == .online
                 case .issues: return st.state == .warn || st.state == .stale || st.state == .offline
                 }
             }()
-            return matchesQuery && matchesFilter
+            return q && f
         }
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    SummaryBar(agg: fleet.aggregate)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                        .listRowSeparator(.hidden)
-                }
-                Section {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
+
                     Picker("Filtre", selection: $filter) {
                         ForEach(RelayFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    .listRowSeparator(.hidden)
-                }
-                Section {
+                    .padding(.vertical, 2)
+
                     ForEach(visible) { server in
                         NavigationLink(value: server) {
                             RelayCardView(server: server, status: fleet.status(for: server))
                         }
+                        .buttonStyle(.plain)
                     }
-                } footer: {
+
                     if let t = fleet.lastSweep {
                         Text("Son tarama: \(t.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.muted(scheme))
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 4)
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
             }
-            .listStyle(.plain)
+            .background(Theme.bg(scheme))
             .searchable(text: $query, prompt: "Relay veya IP ara")
-            .navigationTitle("Filo (\(fleet.servers.count))")
+            .navigationTitle("Röleler (\(fleet.servers.count))")
             .navigationDestination(for: Server.self) { server in
                 RelayDetailView(server: server)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if fleet.isPolling {
-                        ProgressView()
-                    }
+                    if fleet.isPolling { ProgressView() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
+                    Button { showAdd = true } label: { Image(systemName: "plus") }
                 }
             }
             .refreshable { await fleet.sweep() }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showAdd) {
+                ServerEditView(mode: .add)
+            }
             .task {
                 fleet.startPolling()
                 if fleet.lastSweep == nil { await fleet.sweep() }
@@ -82,25 +85,46 @@ struct DashboardView: View {
     }
 }
 
-struct SummaryBar: View {
+/// Filo özeti / sağlık kartı — 4 durum sayacı + toplam bant genişliği.
+struct FleetSummaryCard: View {
+    @Environment(\.colorScheme) private var scheme
     let agg: (total: Int, online: Int, stale: Int, offline: Int, warn: Int)
+    let totalRx: Double
+    let totalTx: Double
 
     var body: some View {
-        HStack(spacing: 10) {
-            stat("\(agg.online)", "Online", .green)
-            stat("\(agg.warn)", "Uyari", .orange)
-            stat("\(agg.stale)", "Sark.", .yellow)
-            stat("\(agg.offline)", "Kirmizi", .red)
+        PanelCard {
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    stat("\(agg.online)", "Çevrimiçi", Theme.ok(scheme))
+                    stat("\(agg.warn)", "Uyarı", Theme.warn(scheme))
+                    stat("\(agg.stale)", "Sarkıyor", Theme.warn(scheme))
+                    stat("\(agg.offline)", "Çevrimdışı", Theme.err(scheme))
+                }
+                Divider().overlay(Theme.border(scheme))
+                HStack {
+                    Label(String(format: "%.1f Mbps", totalRx), systemImage: "arrow.down")
+                        .foregroundStyle(Theme.rx(scheme))
+                    Spacer()
+                    Text("\(agg.total) relay")
+                        .foregroundStyle(Theme.muted(scheme))
+                    Spacer()
+                    Label(String(format: "%.1f Mbps", totalTx), systemImage: "arrow.up")
+                        .foregroundStyle(Theme.tx(scheme))
+                }
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+            }
         }
     }
 
-    private func stat(_ value: String, _ label: String, _ color: Color) -> some View {
+    private func stat(_ v: String, _ l: String, _ c: Color) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.title3.bold().monospacedDigit()).foregroundStyle(color)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(v).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(c)
+            Text(l).font(.system(size: 10)).foregroundStyle(Theme.muted(scheme))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, 8)
+        .background(c.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

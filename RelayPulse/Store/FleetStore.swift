@@ -24,6 +24,9 @@ final class FleetStore: ObservableObject {
 
     var isConfigured: Bool { !servers.isEmpty }
 
+    var totalRxMbps: Double { statuses.values.reduce(0) { $0 + ($1.rxMbps ?? 0) } }
+    var totalTxMbps: Double { statuses.values.reduce(0) { $0 + ($1.txMbps ?? 0) } }
+
     var aggregate: (total: Int, online: Int, stale: Int, offline: Int, warn: Int) {
         var a = (total: servers.count, online: 0, stale: 0, offline: 0, warn: 0)
         for s in servers {
@@ -69,6 +72,49 @@ final class FleetStore: ObservableObject {
         servers = []; statuses = [:]; samples = [:]; lastSweep = nil
         ServerStorage.clear()
     }
+
+    // MARK: - Relay ekle / duzenle / sil (standalone kullanim)
+
+    private func persistCurrent() {
+        ServerStorage.save(FleetExport(exportedAt: Date().timeIntervalSince1970,
+                                       pollSec: pollSec, offlineAfter: offlineAfter,
+                                       servers: servers))
+    }
+
+    /// Yeni relay ekler (ad benzersizse). Var olan adı ezmez.
+    @discardableResult
+    func addServer(_ s: Server) -> Bool {
+        guard !s.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard !servers.contains(where: { $0.name == s.name }) else { return false }
+        servers.append(s)
+        servers.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        statuses[s.name] = RelayStatus(name: s.name)
+        persistCurrent()
+        if timer == nil { startPolling() }
+        return true
+    }
+
+    /// Var olan relay'i günceller. `originalName` ad değişmişse eski kaydı taşır.
+    func updateServer(_ s: Server, originalName: String) {
+        guard let idx = servers.firstIndex(where: { $0.name == originalName }) else { return }
+        if s.name != originalName {
+            statuses[s.name] = statuses.removeValue(forKey: originalName) ?? RelayStatus(name: s.name)
+            samples[s.name] = samples.removeValue(forKey: originalName)
+        }
+        servers[idx] = s
+        servers.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        persistCurrent()
+    }
+
+    func removeServer(named name: String) {
+        servers.removeAll { $0.name == name }
+        statuses.removeValue(forKey: name)
+        samples.removeValue(forKey: name)
+        persistCurrent()
+        if servers.isEmpty { clearConfig() }
+    }
+
+    func persistSettings() { persistCurrent() }
 
     // MARK: - Poll dongusu
 

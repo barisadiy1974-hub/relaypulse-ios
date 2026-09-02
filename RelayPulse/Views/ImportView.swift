@@ -1,74 +1,77 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// İlk açılış — hiç relay yokken. Elle ekle veya Mac RelayPulse JSON'unu içe aktar.
 struct ImportView: View {
     @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
     @State private var showPicker = false
+    @State private var showAdd = false
     @State private var pasteText = ""
     @State private var showPaste = false
     @State private var error: String?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 22) {
                 Spacer()
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.tint)
-                Text("Filo tanimini iceri aktar")
-                    .font(.title2.bold())
-                Text("Mac RelayPulse → Ayarlar → \u{201C}iPhone'a Aktar\u{201D} ile olusan JSON dosyasini buraya al.")
+                    .font(.system(size: 54))
+                    .foregroundStyle(Theme.accent(scheme))
+                Text("RelayPulse")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Theme.text(scheme))
+                Text("Anyone relay filonu izle. Başlamak için relay ekle.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.muted(scheme))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
 
                 VStack(spacing: 12) {
                     Button {
-                        showPicker = true
+                        showAdd = true
                     } label: {
-                        Label("Dosya sec", systemImage: "doc.badge.arrow.up")
+                        Label("Relay ekle", systemImage: "plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
 
                     Button {
-                        showPaste = true
+                        showPicker = true
                     } label: {
-                        Label("JSON yapistir", systemImage: "doc.on.clipboard")
+                        Label("Mac RelayPulse JSON'unu içe aktar", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+
+                    Button("JSON metnini yapıştır") { showPaste = true }
+                        .font(.footnote)
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 36)
 
                 if let error {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                    Text(error).font(.footnote).foregroundStyle(.red)
+                        .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
                 Spacer()
             }
-            .navigationTitle("RelayPulse")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.bg(scheme))
+            .sheet(isPresented: $showAdd) { ServerEditView(mode: .add) }
             .fileImporter(isPresented: $showPicker,
                           allowedContentTypes: [.json, .text, .data],
                           allowsMultipleSelection: false) { result in
-                handle(result)
+                handleFile(result)
             }
             .sheet(isPresented: $showPaste) {
-                PasteSheet(text: $pasteText) { raw in
-                    apply(Data(raw.utf8))
-                }
+                PasteSheet(text: $pasteText) { raw in apply(Data(raw.utf8)) }
             }
         }
     }
 
-    private func handle(_ result: Result<[URL], Error>) {
+    private func handleFile(_ result: Result<[URL], Error>) {
         switch result {
-        case .failure(let e):
-            error = e.localizedDescription
+        case .failure(let e): error = e.localizedDescription
         case .success(let urls):
             guard let url = urls.first else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -79,12 +82,8 @@ struct ImportView: View {
     }
 
     private func apply(_ data: Data) {
-        do {
-            try fleet.importConfig(from: data)
-            error = nil
-        } catch {
-            self.error = "Aktarim basarisiz: \(error.localizedDescription)"
-        }
+        do { try fleet.importConfig(from: data); error = nil }
+        catch { self.error = "Aktarım başarısız: \(error.localizedDescription)" }
     }
 }
 
@@ -100,12 +99,10 @@ private struct PasteSheet: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .padding(8)
-                .navigationTitle("JSON yapistir")
+                .navigationTitle("JSON yapıştır")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Vazgec") { dismiss() }
-                    }
+                    ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Aktar") { onSubmit(text); dismiss() }
                             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

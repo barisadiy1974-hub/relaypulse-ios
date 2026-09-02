@@ -16,6 +16,16 @@ struct Server: Codable, Identifiable, Hashable {
         case name, host, agentPort, agentScheme, agentToken, wallet
     }
 
+    init(name: String, host: String, agentPort: Int = 19191,
+         agentScheme: String = "https", agentToken: String = "", wallet: String = "") {
+        self.name = name
+        self.host = host
+        self.agentPort = agentPort
+        self.agentScheme = agentScheme.lowercased()
+        self.agentToken = agentToken
+        self.wallet = wallet
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
