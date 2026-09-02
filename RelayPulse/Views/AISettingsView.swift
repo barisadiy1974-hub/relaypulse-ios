@@ -45,8 +45,13 @@ struct AISettingsView: View {
             }
 
             Section {
-                secureRow("OpenAI API Key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
-                secureRow("Claude API Key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
+                // Sadece secili saglayicinin anahtari gosterilir — iki kutu
+                // "hangisi nereye" karisikligi yaratiyordu.
+                if ai.aiProvider == "claude" {
+                    secureRow("Claude API Key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
+                } else {
+                    secureRow("OpenAI API Key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
+                }
                 Button {
                     Task { await testKey() }
                 } label: {
@@ -63,9 +68,9 @@ struct AISettingsView: View {
                         .textSelection(.enabled)
                 }
             } header: {
-                Text("Anahtarlar")
+                Text("\(ai.providerLabel) anahtarı · \(ai.modelLabel)")
             } footer: {
-                Text("Keychain'de saklanır. \"Test et\" seçili sağlayıcıya küçük bir istek atar — anahtar geçerli mi hemen görürsün.")
+                Text("Yukarıda seçili sağlayıcının anahtarı. Keychain'de saklanır. \"Test et\" küçük bir istek atar — anahtar geçerli mi hemen görürsün. Sağlayıcıyı değiştirirsen o sağlayıcının kutusu gelir.")
             }
 
             Section {

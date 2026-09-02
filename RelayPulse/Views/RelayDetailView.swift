@@ -48,6 +48,18 @@ struct RelayDetailView: View {
                     }
                 }
 
+                // Mac kartındaki hızlı butonlar: Nyx · Log · HTTPS (+ AI teşhis yukarıda)
+                PanelCard {
+                    HStack(spacing: 8) {
+                        actionLink(.nyx, "Nyx")
+                        actionLink(.log, "Log")
+                        actionLink(.https, "HTTPS")
+                        NavigationLink {
+                            AnonrcEditorView(server: server)
+                        } label: { actionLabel("Config", "slider.horizontal.3") }
+                    }
+                }
+
                 infoCard("Metrikler", [
                     ("anon servisi", status.anonLabel),
                     ("Bağlantı", status.conn.map { "\($0)" } ?? "—"),
@@ -141,6 +153,24 @@ struct RelayDetailView: View {
                              detail: error.localizedDescription, ok: false)
             output = ToolOutput(title: cmd.name, text: error.localizedDescription, failed: true)
         }
+    }
+
+    private func actionLink(_ kind: ToolRunnerView.Kind, _ title: String) -> some View {
+        NavigationLink {
+            ToolRunnerView(kind: kind, fixedServer: server)
+        } label: { actionLabel(title, kind.icon) }
+    }
+
+    private func actionLabel(_ title: String, _ icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 16))
+            Text(title).font(.system(size: 10, weight: .semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Theme.panel3(scheme))
+        .foregroundStyle(Theme.accent(scheme))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func infoCard(_ title: String, _ rows: [(String, String)]) -> some View {

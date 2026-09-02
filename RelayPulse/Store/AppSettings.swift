@@ -34,6 +34,8 @@ final class AppSettings: ObservableObject {
 
     var activeKey: String { aiProvider == "claude" ? claudeKey : openaiKey }
     var hasKey: Bool { !activeKey.isEmpty }
+    var providerLabel: String { aiProvider == "claude" ? "Claude" : "OpenAI" }
+    var modelLabel: String { aiProvider == "claude" ? "claude-haiku-4-5" : "gpt-4o-mini" }
 
     // MARK: - Komut listesi kalıcılığı
 
