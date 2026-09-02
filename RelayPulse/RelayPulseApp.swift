@@ -3,12 +3,14 @@ import SwiftUI
 @main
 struct RelayPulseApp: App {
     @StateObject private var fleet = FleetStore()
+    @StateObject private var ai = AppSettings()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(fleet)
+                .environmentObject(ai)
                 .tint(Color(.sRGB, red: 0.184, green: 0.49, blue: 0.965)) // Mac --accent
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {

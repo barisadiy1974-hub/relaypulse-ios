@@ -15,10 +15,22 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
+# SSH: Apple'ın resmi swift-nio-ssh'i doğrudan kullanılıyor.
+# Citadel (yaygın sarmalayıcı) 0.12.1'de swift-nio-ssh'i üçüncü taraf bir
+# fork'tan (github.com/Wellz26) çekiyor — 143 relay'in SSH kimlik bilgilerini
+# taşıyan bir uygulamada bilinmeyen bir SSH implementasyonuna güvenilmez.
+packages:
+  swift-nio-ssh:
+    url: https://github.com/apple/swift-nio-ssh.git
+    from: "0.9.0"
+
 targets:
   RelayPulse:
     type: application
     platform: iOS
+    dependencies:
+      - package: swift-nio-ssh
+        product: NIOSSH
     sources:
       - path: RelayPulse
     settings:
