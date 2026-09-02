@@ -18,7 +18,8 @@ enum Keychain {
         var add = base
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(add as CFDictionary, nil)
+        let st = SecItemAdd(add as CFDictionary, nil)
+        if st != errSecSuccess { NSLog("Keychain: '\(key)' yazilamadi, OSStatus=\(st)") }
     }
 
     static func get(_ key: String) -> String {

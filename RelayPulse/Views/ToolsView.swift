@@ -8,7 +8,7 @@ struct ToolsView: View {
 
     var body: some View {
         List {
-            Section("AI / Auto-Fix") {
+            Section("Kurulum") {
                 NavigationLink {
                     AISettingsView()
                 } label: {
@@ -17,6 +17,14 @@ struct ToolsView: View {
                                   : "Anahtar girilmedi",
                         "key.horizontal",
                         ai.hasKey ? Theme.ok(scheme) : Theme.warn(scheme))
+                }
+                NavigationLink {
+                    SSHSettingsView()
+                } label: {
+                    row("SSH anahtarı",
+                        SSHKeyStore.hasKey ? "Yüklü — araçlar çalışır" : "Yok — nyx/htop/anonrc çalışmaz",
+                        "terminal",
+                        SSHKeyStore.hasKey ? Theme.ok(scheme) : Theme.warn(scheme))
                 }
             }
 
@@ -54,54 +62,3 @@ struct ToolsView: View {
     }
 }
 
-/// Tek bir relay için araçlar — Mac'teki kart butonlarının (nyx / log / htop / anonrc) karşılığı.
-struct RelayToolsView: View {
-    @EnvironmentObject var ai: AppSettings
-    @Environment(\.colorScheme) private var scheme
-    let server: Server
-
-    var body: some View {
-        List {
-            Section("Terminal") {
-                toolRow("nyx", "Anon relay izleyici (curses)", "chart.xyaxis.line")
-                toolRow("htop", "Süreç izleyici", "cpu")
-                toolRow("anon log", "journalctl -u anon -f", "doc.text.magnifyingglass")
-            }
-
-            Section("Yapılandırma") {
-                toolRow("anonrc düzenle", "/etc/anon/anonrc oku ve yaz", "slider.horizontal.3")
-            }
-
-            Section("Komutlar") {
-                ForEach(ai.commands) { c in
-                    toolRow(c.name, c.command, "terminal", mono: true)
-                }
-            }
-        }
-        .navigationTitle(server.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            Text("SSH bağlantısı ekleniyor — anahtar aktarımı onayını bekliyor.")
-                .font(.caption)
-                .foregroundStyle(Theme.muted(scheme))
-                .frame(maxWidth: .infinity)
-                .padding(10)
-                .background(.bar)
-        }
-    }
-
-    private func toolRow(_ title: String, _ sub: String, _ icon: String, mono: Bool = false) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon).foregroundStyle(Theme.muted(scheme)).frame(width: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).foregroundStyle(Theme.text(scheme))
-                Text(sub)
-                    .font(mono ? .caption2.monospaced() : .caption)
-                    .foregroundStyle(Theme.muted(scheme))
-                    .lineLimit(1)
-            }
-            Spacer()
-            Image(systemName: "lock").font(.caption2).foregroundStyle(.tertiary)
-        }
-    }
-}

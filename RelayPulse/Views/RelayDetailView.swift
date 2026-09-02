@@ -3,11 +3,16 @@ import SwiftUI
 struct RelayDetailView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var ai: AppSettings
     let server: Server
     @State private var showEdit = false
+    @State private var fixing = false
+    @State private var suggestion: AIFixer.Suggestion?
+    @State private var output: ToolOutput?
 
     private var status: RelayStatus { fleet.status(for: server) }
     private var sc: Color { status.state.color(scheme) }
+    private var needsHelp: Bool { status.state == .warn || status.state == .stale || status.state == .offline }
 
     var body: some View {
         ScrollView {
@@ -25,6 +30,20 @@ struct RelayDetailView: View {
                         }
                         if let e = status.lastError {
                             Text(e).font(.caption).foregroundStyle(Theme.err(scheme))
+                        }
+                        if needsHelp {
+                            Button {
+                                Task { await diagnose() }
+                            } label: {
+                                HStack {
+                                    Label(fixing ? "Teşhis ediliyor…" : "AI ile teşhis et", systemImage: "sparkles")
+                                    if fixing { Spacer(); ProgressView() }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(fixing)
+                            .padding(.top, 4)
                         }
                     }
                 }
@@ -59,7 +78,69 @@ struct RelayDetailView: View {
             }
         }
         .sheet(isPresented: $showEdit) { ServerEditView(mode: .edit(server)) }
+        .sheet(item: $output) { o in ToolOutputSheet(output: o) }
+        .alert("AI teşhisi", isPresented: Binding(get: { suggestion != nil }, set: { if !$0 { suggestion = nil } })) {
+            if let s = suggestion, let cmd = ai.commands.first(where: { $0.id == s.commandId }) {
+                Button(ai.dryRun ? "Sadece teşhis (dry-run açık)" : "\"\(cmd.name)\" çalıştır",
+                       role: ai.dryRun ? .cancel : .destructive) {
+                    if !ai.dryRun { Task { await run(cmd) } }
+                    suggestion = nil
+                }
+                Button("Kapat", role: .cancel) { suggestion = nil }
+            } else {
+                Button("Tamam", role: .cancel) { suggestion = nil }
+            }
+        } message: {
+            if let s = suggestion {
+                Text(s.reason.isEmpty ? "Model bir komut önermedi." : s.reason)
+            }
+        }
         .refreshable { await fleet.sweep() }
+    }
+
+    /// SSH ile son logları çeker, AI'a gönderir, önerilen komutu gösterir. Kendiliğinden çalıştırmaz.
+    private func diagnose() async {
+        fixing = true
+        defer { fixing = false }
+        let errMsg = status.lastError ?? (status.anonHealthy ? "durum: \(status.state.rawValue)" : "anon servisi \(status.anonLabel)")
+
+        var logs = "(log alinamadi)"
+        do {
+            let r = try await SSHRunner.shared.run(
+                "journalctl -u anon -n 100 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 100 --no-pager 2>/dev/null || echo '(log yok)'",
+                on: server, timeout: 30)
+            if !r.combined.isEmpty { logs = r.combined }
+        } catch {
+            AILog.shared.add(kind: .error, relay: server.name, title: "Log çekilemedi",
+                             detail: error.localizedDescription, ok: false)
+        }
+
+        do {
+            let s = try await AIFixer.analyze(server: server, errorMessage: errMsg, logs: logs,
+                                              commands: ai.commands, provider: ai.aiProvider, key: ai.activeKey)
+            let cmdName = ai.commands.first(where: { $0.id == s.commandId })?.name ?? "(komut önerilmedi)"
+            AILog.shared.add(kind: .analyze, relay: server.name, title: "Teşhis: \(cmdName)",
+                             detail: "Hata: \(errMsg)\n\nGerekçe: \(s.reason)", ok: true)
+            suggestion = s
+        } catch {
+            AILog.shared.add(kind: .error, relay: server.name, title: "AI teşhisi başarısız",
+                             detail: error.localizedDescription, ok: false)
+            output = ToolOutput(title: "AI teşhisi", text: error.localizedDescription, failed: true)
+        }
+    }
+
+    private func run(_ cmd: FixCommand) async {
+        do {
+            let r = try await SSHRunner.shared.run(cmd.command, on: server, timeout: 60)
+            let ok = (r.exitStatus ?? 0) == 0
+            AILog.shared.add(kind: .command, relay: server.name, title: cmd.name,
+                             detail: r.combined.isEmpty ? "(çıktı yok)" : r.combined, ok: ok)
+            output = ToolOutput(title: cmd.name, text: r.combined.isEmpty ? "(çıktı yok)" : r.combined, failed: !ok)
+        } catch {
+            AILog.shared.add(kind: .error, relay: server.name, title: cmd.name,
+                             detail: error.localizedDescription, ok: false)
+            output = ToolOutput(title: cmd.name, text: error.localizedDescription, failed: true)
+        }
     }
 
     private func infoCard(_ title: String, _ rows: [(String, String)]) -> some View {

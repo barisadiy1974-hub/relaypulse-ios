@@ -9,21 +9,27 @@ struct Server: Codable, Identifiable, Hashable {
     var agentScheme: String
     var agentToken: String
     var wallet: String
+    /// SSH (araçlar için): kullanıcı ve port. Özel anahtar tek ve ortaktır — Keychain'de.
+    var sshUser: String
+    var sshPort: Int
 
     var id: String { name }
 
     enum CodingKeys: String, CodingKey {
-        case name, host, agentPort, agentScheme, agentToken, wallet
+        case name, host, agentPort, agentScheme, agentToken, wallet, sshUser, sshPort
     }
 
     init(name: String, host: String, agentPort: Int = 19191,
-         agentScheme: String = "https", agentToken: String = "", wallet: String = "") {
+         agentScheme: String = "https", agentToken: String = "", wallet: String = "",
+         sshUser: String = "root", sshPort: Int = 22) {
         self.name = name
         self.host = host
         self.agentPort = agentPort
         self.agentScheme = agentScheme.lowercased()
         self.agentToken = agentToken
         self.wallet = wallet
+        self.sshUser = sshUser
+        self.sshPort = sshPort
     }
 
     init(from decoder: Decoder) throws {
@@ -34,6 +40,8 @@ struct Server: Codable, Identifiable, Hashable {
         agentScheme = ((try? c.decode(String.self, forKey: .agentScheme)) ?? "https").lowercased()
         agentToken = (try? c.decode(String.self, forKey: .agentToken)) ?? ""
         wallet = (try? c.decode(String.self, forKey: .wallet)) ?? ""
+        sshUser = (try? c.decode(String.self, forKey: .sshUser)) ?? "root"
+        sshPort = (try? c.decode(Int.self, forKey: .sshPort)) ?? 22
     }
 
     var metricsURL: URL? {

@@ -9,6 +9,25 @@ struct AISettingsView: View {
     @State private var showClaude = false
     @State private var editing: FixCommand?
     @State private var showAddCmd = false
+    @State private var testing = false
+    @State private var testResult: String?
+    @State private var testOK = false
+
+    private func testKey() async {
+        testing = true; testResult = nil
+        defer { testing = false }
+        do {
+            let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey)
+            testOK = true
+            testResult = "✓ Anahtar geçerli — \(info)"
+            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi", detail: info, ok: true)
+        } catch {
+            testOK = false
+            testResult = "✗ \(error.localizedDescription)"
+            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi",
+                             detail: error.localizedDescription, ok: false)
+        }
+    }
 
     var body: some View {
         Form {
@@ -23,10 +42,37 @@ struct AISettingsView: View {
             Section {
                 secureRow("OpenAI API Key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
                 secureRow("Claude API Key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
+                Button {
+                    Task { await testKey() }
+                } label: {
+                    HStack {
+                        Label("Anahtarı test et", systemImage: "bolt.horizontal")
+                        if testing { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(testing || !ai.hasKey)
+                if let t = testResult {
+                    Text(t)
+                        .font(.caption2)
+                        .foregroundStyle(testOK ? Theme.ok(scheme) : Theme.err(scheme))
+                        .textSelection(.enabled)
+                }
             } header: {
                 Text("Anahtarlar")
             } footer: {
-                Text("Keychain'de saklanır. Anahtar yoksa teşhis çalışmaz; düzeltme komutlarını yine elle çalıştırabilirsin.")
+                Text("Keychain'de saklanır. \"Test et\" seçili sağlayıcıya küçük bir istek atar — anahtar geçerli mi hemen görürsün.")
+            }
+
+            Section {
+                NavigationLink { AILogView() } label: {
+                    HStack {
+                        Label("AI kaydı / hatalar", systemImage: "list.bullet.rectangle")
+                        Spacer()
+                        Text("\(AILog.shared.entries.count)").foregroundStyle(Theme.muted(scheme))
+                    }
+                }
+            } footer: {
+                Text("Yapılan teşhisler, çalıştırılan komutlar ve hatalar burada tutulur.")
             }
 
             Section {
