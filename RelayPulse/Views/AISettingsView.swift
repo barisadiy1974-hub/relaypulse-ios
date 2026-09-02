@@ -18,7 +18,13 @@ struct AISettingsView: View {
         defer { testing = false }
         guard ai.hasKey else {
             testOK = false
-            testResult = "✗ \(ai.aiProvider == "claude" ? "Claude" : "OpenAI") anahtarı boş — yukarıdaki alana gir (seçili sağlayıcı: \(ai.aiProvider))"
+            testResult = "✗ \(ai.providerLabel) anahtarı boş — yukarıdaki alana gir"
+            return
+        }
+        if let other = ai.keyBelongsToOtherProvider {
+            testOK = false
+            let otherLabel = other == "claude" ? "Claude" : "OpenAI"
+            testResult = "✗ Girdiğin anahtar \(otherLabel) anahtarı (\(other == "claude" ? "sk-ant-" : "sk-") ile başlıyor) ama sağlayıcı \(ai.providerLabel). Yukarıdaki düğmeyle \(otherLabel)'a geç."
             return
         }
         do {
@@ -61,6 +67,28 @@ struct AISettingsView: View {
                     }
                 }
                 .disabled(testing)
+
+                // Yanlis kutuya yapistirilan anahtari API'ye gitmeden yakala.
+                if let other = ai.keyBelongsToOtherProvider {
+                    let otherLabel = other == "claude" ? "Claude" : "OpenAI"
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Bu bir \(otherLabel) anahtarı, \(ai.providerLabel) kutusunda.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.warn(scheme))
+                        Button {
+                            let k = ai.activeKey
+                            if other == "claude" { ai.openaiKey = ""; ai.claudeKey = k }
+                            else { ai.claudeKey = ""; ai.openaiKey = k }
+                            ai.aiProvider = other
+                            testResult = nil
+                        } label: {
+                            Label("\(otherLabel)'a geç ve anahtarı taşı", systemImage: "arrow.left.arrow.right")
+                                .font(.footnote.weight(.semibold))
+                        }
+                    }
+                }
+
                 if let t = testResult {
                     Text(t)
                         .font(.caption2)

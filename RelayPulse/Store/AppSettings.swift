@@ -37,6 +37,16 @@ final class AppSettings: ObservableObject {
     var providerLabel: String { aiProvider == "claude" ? "Claude" : "OpenAI" }
     var modelLabel: String { aiProvider == "claude" ? "claude-haiku-4-5" : "gpt-4o-mini" }
 
+    /// Anahtar oneki secili saglayiciya uymuyorsa hangi saglayiciya ait oldugunu doner.
+    /// Anthropic anahtarlari "sk-ant-", OpenAI'inkiler "sk-" ile baslar.
+    var keyBelongsToOtherProvider: String? {
+        let k = activeKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !k.isEmpty else { return nil }
+        if aiProvider == "openai" && k.hasPrefix("sk-ant-") { return "claude" }
+        if aiProvider == "claude" && k.hasPrefix("sk-") && !k.hasPrefix("sk-ant-") { return "openai" }
+        return nil
+    }
+
     // MARK: - Komut listesi kalıcılığı
 
     private static let cmdKey = "autoFixCommands"
