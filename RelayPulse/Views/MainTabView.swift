@@ -7,10 +7,8 @@ struct MainTabView: View {
             DashboardView()
                 .tabItem { Label("Röleler", systemImage: "antenna.radiowaves.left.and.right") }
 
-            NavigationStack {
-                WebDashboardView(title: "Genel Bakış", url: URL(string: "https://www.anyone.io/blog")!)
-            }
-            .tabItem { Label("Genel Bakış", systemImage: "newspaper") }
+            FleetHealthView()
+                .tabItem { Label("Filo Sağlığı", systemImage: "waveform.path.ecg") }
 
             NavigationStack {
                 WebDashboardView(title: "Cüzdanlar", url: URL(string: "https://dashboard.anyone.io")!)

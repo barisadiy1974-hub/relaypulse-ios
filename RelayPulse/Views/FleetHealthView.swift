@@ -1,0 +1,157 @@
+import SwiftUI
+
+/// Filo Sağlığı — tek ekranda 143 relay'in nabzı.
+/// Tüm veri FleetStore'daki mevcut poll sonuçlarından türetilir; ek istek atılmaz.
+struct FleetHealthView: View {
+    @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
+
+    private var rows: [(Server, RelayStatus)] {
+        fleet.servers.map { ($0, fleet.status(for: $0)) }
+    }
+
+    /// Ele alınması gerekenler: kırmızı → sarı → anon dertli, en kötü önce.
+    private var problems: [(Server, RelayStatus)] {
+        rows.filter { $0.1.state == .offline || $0.1.state == .stale || $0.1.state == .warn }
+            .sorted { a, b in rank(a.1.state) < rank(b.1.state) }
+    }
+
+    private func rank(_ s: RelayState) -> Int {
+        switch s {
+        case .offline: return 0
+        case .warn:    return 1
+        case .stale:   return 2
+        default:       return 3
+        }
+    }
+
+    private var ramHot: [(Server, RelayStatus)] { rows.filter { ($0.1.memPct ?? 0) >= 90 }.sorted { ($0.1.memPct ?? 0) > ($1.1.memPct ?? 0) } }
+    private var diskHot: [(Server, RelayStatus)] { rows.filter { ($0.1.diskPct ?? 0) >= 85 }.sorted { ($0.1.diskPct ?? 0) > ($1.1.diskPct ?? 0) } }
+    private var cpuHot: [(Server, RelayStatus)] { rows.filter { ($0.1.cpuPct ?? 0) >= 80 }.sorted { ($0.1.cpuPct ?? 0) > ($1.1.cpuPct ?? 0) } }
+    private var busiest: [(Server, RelayStatus)] {
+        rows.filter { ($0.1.rxMbps ?? 0) + ($0.1.txMbps ?? 0) > 0 }
+            .sorted { (($0.1.rxMbps ?? 0) + ($0.1.txMbps ?? 0)) > (($1.1.rxMbps ?? 0) + ($1.1.txMbps ?? 0)) }
+            .prefix(5).map { $0 }
+    }
+    private var totalConn: Int { rows.compactMap { $0.1.conn }.reduce(0, +) }
+    private var avgMem: Double? {
+        let v = rows.compactMap { $0.1.memPct }
+        return v.isEmpty ? nil : v.reduce(0, +) / Double(v.count)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
+
+                    PanelCard {
+                        HStack {
+                            big("\(totalConn)", "Toplam bağlantı", Theme.accent(scheme))
+                            Divider().frame(height: 34).overlay(Theme.border(scheme))
+                            big(avgMem.map { "\(Int($0))%" } ?? "—", "Ortalama RAM", Theme.text(scheme))
+                        }
+                    }
+
+                    if problems.isEmpty {
+                        PanelCard(stateColor: Theme.ok(scheme)) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.ok(scheme))
+                                Text("Tüm relay'ler sağlıklı")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Theme.text(scheme))
+                            }
+                        }
+                    } else {
+                        section("Dikkat gerektirenler (\(problems.count))") {
+                            ForEach(problems, id: \.0.id) { s, st in
+                                NavigationLink(value: s) {
+                                    problemRow(s, st)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if !ramHot.isEmpty {
+                        section("RAM kritik (≥90%)") { list(ramHot) { "\(Int($0.memPct ?? 0))%" } }
+                    }
+                    if !diskHot.isEmpty {
+                        section("Disk dolmak üzere (≥85%)") { list(diskHot) { "\(Int($0.diskPct ?? 0))%" } }
+                    }
+                    if !cpuHot.isEmpty {
+                        section("CPU yüksek (≥80%)") { list(cpuHot) { "\(Int($0.cpuPct ?? 0))%" } }
+                    }
+                    if !busiest.isEmpty {
+                        section("En yoğun 5 relay") {
+                            list(busiest) { String(format: "%.1f Mbps", ($0.rxMbps ?? 0) + ($0.txMbps ?? 0)) }
+                        }
+                    }
+
+                    if let t = fleet.lastSweep {
+                        Text("Son tarama: \(t.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2).foregroundStyle(Theme.muted(scheme))
+                            .frame(maxWidth: .infinity).padding(.top, 4)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.top, 6)
+            }
+            .background(Theme.bg(scheme))
+            .navigationTitle("Filo Sağlığı")
+            .navigationDestination(for: Server.self) { RelayDetailView(server: $0) }
+            .refreshable { await fleet.sweep() }
+        }
+    }
+
+    // MARK: - Parçalar
+
+    private func big(_ v: String, _ l: String, _ c: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(v).font(.system(size: 22, weight: .bold).monospacedDigit()).foregroundStyle(c)
+            Text(l).font(.system(size: 11)).foregroundStyle(Theme.muted(scheme))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold)).tracking(0.5)
+                .foregroundStyle(Theme.muted(scheme))
+                .padding(.leading, 4).padding(.top, 6)
+            PanelCard { VStack(spacing: 0) { content() } }
+        }
+    }
+
+    private func problemRow(_ s: Server, _ st: RelayStatus) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(st.state.color(scheme)).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(s.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text(scheme))
+                Text(st.lastError ?? (st.anonHealthy ? st.state.label : "anon: \(st.anonLabel)"))
+                    .font(.caption2).foregroundStyle(Theme.muted(scheme)).lineLimit(1)
+            }
+            Spacer()
+            Text(st.state.label).font(.system(size: 11, weight: .medium)).foregroundStyle(st.state.color(scheme))
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func list(_ items: [(Server, RelayStatus)], value: @escaping (RelayStatus) -> String) -> some View {
+        ForEach(items.prefix(8), id: \.0.id) { s, st in
+            NavigationLink(value: s) {
+                HStack {
+                    Circle().fill(st.state.color(scheme)).frame(width: 7, height: 7)
+                    Text(s.name).font(.system(size: 13)).foregroundStyle(Theme.text(scheme))
+                    Spacer()
+                    Text(value(st))
+                        .font(.system(size: 13, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.text(scheme))
+                }
+                .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
