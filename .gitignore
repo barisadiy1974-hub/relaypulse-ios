@@ -1,0 +1,17 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# xcodegen üretir — kaynak project.yml
+RelayPulse.xcodeproj/
+
+# macOS
+.DS_Store
+
+# Filo export dosyaları (token içerir — repoya girmez)
+*fleet*.json
+relaypulse-servers.json
