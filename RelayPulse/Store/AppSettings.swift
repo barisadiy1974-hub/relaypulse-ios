@@ -73,6 +73,24 @@ final class AppSettings: ObservableObject {
 
     func resetCommands() { commands = AppSettings.defaultCommands }
 
+    /// İlk açılışta `Documents/ai_key.json` varsa AI anahtarını içeri alır ve dosyayı siler.
+    /// Mac'ten `devicectl device copy to` ile tohumlamak için — anahtarı elle yazmaya gerek kalmaz.
+    /// Beklenen biçim: {"provider":"claude","key":"sk-ant-…","workspaceId":""}
+    func importSeedKeyIfPresent() {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let f = dir.appendingPathComponent("ai_key.json")
+        guard let data = try? Data(contentsOf: f),
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = (o["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty else { return }
+        let provider = (o["provider"] as? String) ?? (key.hasPrefix("sk-ant-") ? "claude" : "openai")
+        if provider == "claude" { claudeKey = key } else { openaiKey = key }
+        claudeWorkspaceId = (o["workspaceId"] as? String) ?? ""
+        aiProvider = provider
+        try? FileManager.default.removeItem(at: f)
+        NSLog("AppSettings: AI anahtari tohum dosyasindan alindi (saglayici=\(provider))")
+    }
+
     /// Mac src/config.js DEFAULTS.autoFixCommands ile birebir.
     static let defaultCommands: [FixCommand] = [
         .init(id: 1, name: "Relay servisini yeniden başlat",

@@ -14,6 +14,7 @@ struct RelayPulseApp: App {
                 .tint(Color(.sRGB, red: 0.184, green: 0.49, blue: 0.965)) // Mac --accent
                 .task {
                     SSHKeyStore.importSeedFileIfPresent()
+                    ai.importSeedKeyIfPresent()
                     if ProcessInfo.processInfo.arguments.contains("--ssh-selftest") {
                         await sshSelfTest()
                     }
