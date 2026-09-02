@@ -139,8 +139,8 @@ enum AIFixer {
     }
 
     private static func check(_ resp: URLResponse, _ data: Data) throws {
-        guard let http = resp as? HTTPURLResponse, !(200..<300).contains(http.statusCode) else { return }
-        throw AIError.http((resp as! HTTPURLResponse).statusCode,
-                           String(decoding: data, as: UTF8.self))
+        guard let http = resp as? HTTPURLResponse else { return }
+        guard !(200..<300).contains(http.statusCode) else { return }
+        throw AIError.http(http.statusCode, String(decoding: data, as: UTF8.self))
     }
 }

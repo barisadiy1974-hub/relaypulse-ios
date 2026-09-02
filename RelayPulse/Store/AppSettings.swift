@@ -11,8 +11,15 @@ struct FixCommand: Codable, Identifiable, Hashable {
 /// AI / auto-fix ayarları. Anahtarlar Keychain'de, gerisi UserDefaults'ta.
 @MainActor
 final class AppSettings: ObservableObject {
-    @AppStorage("aiProvider") var aiProvider: String = "openai"
-    @AppStorage("autoFixDryRun") var dryRun: Bool = true
+    // NOT: @AppStorage burada KULLANILMAZ. O bir View property wrapper'i;
+    // ObservableObject icinde objectWillChange tetiklemiyor -> saglayici
+    // degistiginde ekran yenilenmiyor, "anahtar var mi" kontrolu bayat kaliyordu.
+    @Published var aiProvider: String = UserDefaults.standard.string(forKey: "aiProvider") ?? "openai" {
+        didSet { UserDefaults.standard.set(aiProvider, forKey: "aiProvider") }
+    }
+    @Published var dryRun: Bool = UserDefaults.standard.object(forKey: "autoFixDryRun") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(dryRun, forKey: "autoFixDryRun") }
+    }
 
     @Published var openaiKey: String = Keychain.get("openaiApiKey") {
         didSet { Keychain.set(openaiKey, for: "openaiApiKey") }

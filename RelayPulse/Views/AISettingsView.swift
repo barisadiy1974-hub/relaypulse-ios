@@ -16,6 +16,11 @@ struct AISettingsView: View {
     private func testKey() async {
         testing = true; testResult = nil
         defer { testing = false }
+        guard ai.hasKey else {
+            testOK = false
+            testResult = "✗ \(ai.aiProvider == "claude" ? "Claude" : "OpenAI") anahtarı boş — yukarıdaki alana gir (seçili sağlayıcı: \(ai.aiProvider))"
+            return
+        }
         do {
             let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey)
             testOK = true
@@ -50,7 +55,7 @@ struct AISettingsView: View {
                         if testing { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(testing || !ai.hasKey)
+                .disabled(testing)
                 if let t = testResult {
                     Text(t)
                         .font(.caption2)
