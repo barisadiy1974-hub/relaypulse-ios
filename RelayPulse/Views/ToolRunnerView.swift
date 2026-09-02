@@ -17,8 +17,8 @@ struct ToolRunnerView: View {
         }
         var subtitle: String {
             switch self {
-            case .nyx:   return "Relay durumu: servis, portlar, bağlantı, fingerprint"
-            case .htop:  return "Süreçler, bellek, disk (top -bn1)"
+            case .nyx:   return "Sürüm, uptime, trafik, consensus bayrakları, ağırlık, bağlantılar"
+            case .htop:  return "Yük, en çok CPU/bellek kullanan süreçler, disk"
             case .log:   return "journalctl -u anon -n 60"
             case .https: return "Agent :19191 erişilebilir mi"
             }
@@ -32,18 +32,13 @@ struct ToolRunnerView: View {
             }
         }
         /// nyx/htop tam ekran curses uygulamaları — telefonda tek seferlik eşdeğerleri.
+        /// nyx, anon'un kontrol soketine bağlanıp gerçek relay verisini çeker.
         var command: String {
             switch self {
-            case .nyx: return """
-                for svc in anon anon@default anyone anyone-relay; do systemctl is-active "$svc" >/dev/null 2>&1 && systemctl status "$svc" --no-pager -n 0 | head -6 && break; done
-                echo '--- dinlenen portlar ---'; ss -tnlp 2>/dev/null | grep -E ':(9001|9030|9050|9051)' || echo '(yok)'
-                echo '--- kurulu baglanti ---'; ss -tn state established 2>/dev/null | tail -n +2 | wc -l
-                echo '--- fingerprint ---'; cat /var/lib/anon/fingerprint 2>/dev/null || find /var/lib/anon* -name fingerprint -exec cat {} \\; 2>/dev/null | head -2 || echo '(yok)'
-                echo '--- bant ---'; grep -h 'BandwidthRate\\|RelayBandwidth' /etc/anon/anonrc* 2>/dev/null | head -4 || echo '(limit yok)'
-                """
-            case .htop: return "top -bn1 2>/dev/null | head -22; echo '--- bellek ---'; free -m 2>/dev/null; echo '--- disk ---'; df -h / 2>/dev/null"
-            case .log:  return "journalctl -u anon -n 60 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 60 --no-pager 2>/dev/null || echo '(log bulunamadi)'"
-            case .https: return "curl -sk -o /dev/null -w 'HTTP %{http_code} · %{time_total}s\\n' https://127.0.0.1:19191/metrics 2>&1 || echo 'curl yok'; systemctl is-active anyone-agent 2>/dev/null || systemctl is-active relaypulse-agent 2>/dev/null || echo 'agent servisi bulunamadi'"
+            case .nyx:   return RelayScripts.nyx
+            case .htop:  return RelayScripts.htop
+            case .log:   return RelayScripts.log
+            case .https: return RelayScripts.https
             }
         }
     }

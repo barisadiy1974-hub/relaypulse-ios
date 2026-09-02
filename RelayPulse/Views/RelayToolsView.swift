@@ -1,70 +1,58 @@
 import SwiftUI
 
-/// Tek relay için araçlar — Mac'teki nyx / htop / anon log / anonrc karşılığı.
-/// nyx ve htop tam ekran curses uygulamaları; telefonda tek seferlik (batch)
-/// eşdeğerleri çalıştırılır — aynı bilgi, interaktif ekran olmadan.
+/// Tek relay için tüm araçlar bir arada — Araçlar › Relay başına.
+/// Komutlar `RelayScripts`'te; burada sadece o relay'e sabitlenmiş bağlantılar var.
 struct RelayToolsView: View {
     @EnvironmentObject var ai: AppSettings
     @Environment(\.colorScheme) private var scheme
     let server: Server
 
-    @State private var running: String?
+    @State private var running: Int?
     @State private var output: ToolOutput?
-
-    private struct Tool: Identifiable {
-        let id: String
-        let title: String
-        let subtitle: String
-        let icon: String
-        let command: String
-    }
-
-    private var systemTools: [Tool] { [
-        .init(id: "nyx", title: "Relay durumu", subtitle: "nyx yerine: servis + bayraklar + bağlantı",
-              icon: "chart.xyaxis.line",
-              command: """
-              for svc in anon anon@default anyone anyone-relay; do systemctl is-active "$svc" >/dev/null 2>&1 && systemctl status "$svc" --no-pager -n 0 | head -6 && break; done
-              echo '--- dinlenen portlar ---'; ss -tnlp 2>/dev/null | grep -E ':(9001|9030|9050|9051)' || echo '(yok)'
-              echo '--- baglanti ---'; ss -tn state established 2>/dev/null | tail -n +2 | wc -l
-              echo '--- fingerprint ---'; cat /var/lib/anon/fingerprint 2>/dev/null || find /var/lib/anon* -name fingerprint -exec cat {} \\; 2>/dev/null | head -2 || echo '(yok)'
-              """),
-        .init(id: "htop", title: "Süreçler ve yük", subtitle: "htop yerine: top -bn1 + bellek",
-              icon: "cpu",
-              command: "top -bn1 2>/dev/null | head -20; echo '--- bellek ---'; free -m 2>/dev/null; echo '--- disk ---'; df -h / 2>/dev/null"),
-        .init(id: "log", title: "anon log", subtitle: "journalctl -u anon -n 60",
-              icon: "doc.text.magnifyingglass",
-              command: "journalctl -u anon -n 60 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 60 --no-pager 2>/dev/null || echo '(log bulunamadi)'"),
-    ] }
 
     var body: some View {
         List {
             Section("İzleme") {
-                ForEach(systemTools) { t in toolRow(t) }
+                ForEach(ToolRunnerView.Kind.allCases) { k in
+                    NavigationLink {
+                        ToolRunnerView(kind: k, fixedServer: server)
+                    } label: {
+                        label(k.title, k.subtitle, k.icon)
+                    }
+                }
             }
 
             Section("Yapılandırma") {
                 NavigationLink {
                     AnonrcEditorView(server: server)
                 } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "slider.horizontal.3").foregroundStyle(Theme.muted(scheme)).frame(width: 24)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("anonrc düzenle").foregroundStyle(Theme.text(scheme))
-                            Text("/etc/anon/anonrc oku ve yaz").font(.caption).foregroundStyle(Theme.muted(scheme))
-                        }
-                    }
+                    label("anonrc düzenle", "/etc/anon/anonrc oku ve yaz", "slider.horizontal.3")
                 }
             }
 
             Section {
                 ForEach(ai.commands) { c in
-                    toolRow(.init(id: "cmd\(c.id)", title: c.name, subtitle: c.command,
-                                  icon: "terminal", command: c.command), mono: true)
+                    Button {
+                        run(c)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "terminal").foregroundStyle(Theme.muted(scheme)).frame(width: 24)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(c.name).foregroundStyle(Theme.text(scheme))
+                                Text(c.command).font(.caption2.monospaced())
+                                    .foregroundStyle(Theme.muted(scheme)).lineLimit(1)
+                            }
+                            Spacer()
+                            if running == c.id { ProgressView() }
+                            else { Image(systemName: "play.circle").foregroundStyle(Theme.accent(scheme)) }
+                        }
+                    }
+                    .disabled(running != nil)
                 }
             } header: {
                 Text("Düzeltme komutları")
             } footer: {
-                Text("Bu komutlar relay'de root olarak çalışır. Mac RelayPulse'taki liste ile aynı.")
+                Text("Relay'de root olarak çalışır. Mac RelayPulse'taki liste ile aynı.")
             }
         }
         .navigationTitle(server.name)
@@ -72,72 +60,31 @@ struct RelayToolsView: View {
         .sheet(item: $output) { o in ToolOutputSheet(output: o) }
     }
 
-    private func toolRow(_ t: Tool, mono: Bool = false) -> some View {
-        Button {
-            run(t)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: t.icon).foregroundStyle(Theme.muted(scheme)).frame(width: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(t.title).foregroundStyle(Theme.text(scheme))
-                    Text(t.subtitle)
-                        .font(mono ? .caption2.monospaced() : .caption)
-                        .foregroundStyle(Theme.muted(scheme)).lineLimit(1)
-                }
-                Spacer()
-                if running == t.id { ProgressView() }
-                else { Image(systemName: "play.circle").foregroundStyle(Theme.accent(scheme)) }
+    private func label(_ title: String, _ sub: String, _ icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).foregroundStyle(Theme.muted(scheme)).frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).foregroundStyle(Theme.text(scheme))
+                Text(sub).font(.caption).foregroundStyle(Theme.muted(scheme)).lineLimit(2)
             }
         }
-        .disabled(running != nil)
     }
 
-    private func run(_ t: Tool) {
-        running = t.id
+    private func run(_ c: FixCommand) {
+        running = c.id
         Task {
             do {
-                let r = try await SSHRunner.shared.run(t.command, on: server, timeout: 30)
-                output = ToolOutput(title: t.title, text: r.combined.isEmpty ? "(çıktı yok)" : r.combined,
-                                    failed: (r.exitStatus ?? 0) != 0)
+                let r = try await SSHRunner.shared.run(c.command, on: server, timeout: 60)
+                let ok = (r.exitStatus ?? 0) == 0
+                let text = r.combined.isEmpty ? "(çıktı yok)" : r.combined
+                output = ToolOutput(title: c.name, text: text, failed: !ok)
+                AILog.shared.add(kind: .command, relay: server.name, title: c.name, detail: text, ok: ok)
             } catch {
-                output = ToolOutput(title: t.title, text: error.localizedDescription, failed: true)
+                output = ToolOutput(title: c.name, text: error.localizedDescription, failed: true)
+                AILog.shared.add(kind: .error, relay: server.name, title: c.name,
+                                 detail: error.localizedDescription, ok: false)
             }
             running = nil
-        }
-    }
-}
-
-struct ToolOutput: Identifiable {
-    let id = UUID()
-    let title: String
-    let text: String
-    let failed: Bool
-}
-
-struct ToolOutputSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme
-    let output: ToolOutput
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                Text(output.text)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(output.failed ? Theme.err(scheme) : Theme.text(scheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(12)
-            }
-            .background(Theme.bg(scheme))
-            .navigationTitle(output.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Kapat") { dismiss() } }
-                ToolbarItem(placement: .topBarLeading) {
-                    ShareLink(item: output.text) { Image(systemName: "square.and.arrow.up") }
-                }
-            }
         }
     }
 }
