@@ -95,12 +95,11 @@ final class FleetStore: ObservableObject {
         let targets = servers
         await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
             var iterator = targets.makeIterator()
-            let maxInFlight = 16
-            var running = 0
+            // 143 host'a aynı anda TLS el sıkışması geçici hataya yol açıyordu — 10'lu pencere.
+            let maxInFlight = 10
 
             func addNext() {
                 guard let s = iterator.next() else { return }
-                running += 1
                 group.addTask {
                     do { return (s.name, .success(try await AgentClient.shared.fetch(s))) }
                     catch { return (s.name, .failure(error)) }
@@ -108,7 +107,6 @@ final class FleetStore: ObservableObject {
             }
             for _ in 0..<maxInFlight { addNext() }
             for await (name, result) in group {
-                running -= 1
                 switch result {
                 case .success(let m): recordSuccess(name, m)
                 case .failure(let e): recordFailure(name, e)

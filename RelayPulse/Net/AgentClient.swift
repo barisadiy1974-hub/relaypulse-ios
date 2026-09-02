@@ -27,18 +27,39 @@ final class AgentClient: NSObject, URLSessionDelegate {
 
     private lazy var session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 6
-        cfg.timeoutIntervalForResource = 10
+        // agent.py düz HTTP/1.1 (Python http.server + TLS soketi) — HTTP/3 yok.
+        // QUIC yarışı request seviyesinde kapatılıyor (fetchOnce'ta
+        // req.assumesHTTP3Capable = false); yoksa 143 host'a paralel taramada
+        // boşa QUIC denemesi + TCP'ye düşme gecikmesi geçici "sarı" üretiyor.
+        cfg.timeoutIntervalForRequest = 12
+        cfg.timeoutIntervalForResource = 16
         cfg.waitsForConnectivity = false
-        cfg.httpMaximumConnectionsPerHost = 4
+        cfg.httpMaximumConnectionsPerHost = 2
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
     }()
 
+    /// Geçici hata (timeout / bağlantı) durumunda bir kez daha dener — Mac'in SSH
+    /// retry'ına denk. Kalıcı hatalar (403, HTTP 4xx/5xx, parse) tekrar denenmez.
     func fetch(_ server: Server) async throws -> AgentMetrics {
+        do {
+            return try await fetchOnce(server)
+        } catch let e as AgentError {
+            switch e {
+            case .timeout, .transport:
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                return try await fetchOnce(server)
+            default:
+                throw e
+            }
+        }
+    }
+
+    private func fetchOnce(_ server: Server) async throws -> AgentMetrics {
         guard let url = server.metricsURL else { throw AgentError.noURL }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
+        req.assumesHTTP3Capable = false
         if !server.agentToken.isEmpty {
             req.setValue(server.agentToken, forHTTPHeaderField: "X-Agent-Token")
         }
