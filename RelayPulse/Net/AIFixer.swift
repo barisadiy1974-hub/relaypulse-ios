@@ -27,9 +27,9 @@ enum AIFixer {
     // MARK: - Anahtar testi
 
     /// Anahtarı en ucuz istekle doğrular. Başarılıysa modelin adını döner.
-    static func testKey(provider: String, key: String) async throws -> String {
+    static func testKey(provider: String, key: String, workspaceId: String = "") async throws -> String {
         guard !key.isEmpty else { throw AIError.noKey }
-        let reply = try await call(provider: provider, key: key,
+        let reply = try await call(provider: provider, key: key, workspaceId: workspaceId,
                                    prompt: "Sadece OK yaz, baska hicbir sey yazma.",
                                    maxTokens: 8)
         let model = provider == "claude" ? "claude-haiku-4-5" : "gpt-4o-mini"
@@ -39,7 +39,8 @@ enum AIFixer {
     // MARK: - Teşhis
 
     static func analyze(server: Server, errorMessage: String, logs: String,
-                        commands: [FixCommand], provider: String, key: String) async throws -> Suggestion {
+                        commands: [FixCommand], provider: String, key: String,
+                        workspaceId: String = "") async throws -> Suggestion {
         guard !key.isEmpty else { throw AIError.noKey }
         let list = commands.map { "id=\($0.id) ad=\"\($0.name)\"" }.joined(separator: "\n")
         let prompt = """
@@ -67,7 +68,8 @@ enum AIFixer {
         Yanit formati (SADECE JSON):
         {"commandId": <sayi veya null>, "reason": "<asil neden ve neden bu komut, 1-2 cumle>"}
         """
-        let text = try await call(provider: provider, key: key, prompt: prompt, maxTokens: 500)
+        let text = try await call(provider: provider, key: key, workspaceId: workspaceId,
+                                  prompt: prompt, maxTokens: 500)
         return parse(text)
     }
 
@@ -88,9 +90,10 @@ enum AIFixer {
 
     // MARK: - Sağlayıcılar
 
-    private static func call(provider: String, key: String, prompt: String, maxTokens: Int) async throws -> String {
+    private static func call(provider: String, key: String, workspaceId: String,
+                             prompt: String, maxTokens: Int) async throws -> String {
         provider == "claude"
-            ? try await claude(key: key, prompt: prompt, maxTokens: maxTokens)
+            ? try await claude(key: key, workspaceId: workspaceId, prompt: prompt, maxTokens: maxTokens)
             : try await openAI(key: key, prompt: prompt, maxTokens: maxTokens)
     }
 
@@ -116,12 +119,15 @@ enum AIFixer {
         return content
     }
 
-    private static func claude(key: String, prompt: String, maxTokens: Int) async throws -> String {
+    private static func claude(key: String, workspaceId: String, prompt: String, maxTokens: Int) async throws -> String {
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         req.httpMethod = "POST"
         req.setValue(key, forHTTPHeaderField: "x-api-key")
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Workspace'e bagli anahtarlar bu baslik olmadan 400 doner.
+        let ws = workspaceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !ws.isEmpty { req.setValue(ws, forHTTPHeaderField: "anthropic-workspace-id") }
         req.timeoutInterval = 45
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "model": "claude-haiku-4-5",

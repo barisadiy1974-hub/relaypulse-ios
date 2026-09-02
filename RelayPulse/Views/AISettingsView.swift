@@ -28,15 +28,23 @@ struct AISettingsView: View {
             return
         }
         do {
-            let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey)
+            let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey,
+                                                 workspaceId: ai.claudeWorkspaceId)
             testOK = true
             testResult = "✓ Anahtar geçerli — \(info)"
             AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi", detail: info, ok: true)
         } catch {
             testOK = false
-            testResult = "✗ \(error.localizedDescription)"
-            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi",
-                             detail: error.localizedDescription, ok: false)
+            let raw = error.localizedDescription
+            // Sik gorulen hatalari duz Turkce anlat, ham JSON birakma.
+            if raw.contains("anthropic-workspace-id") {
+                testResult = "✗ Bu anahtar bir workspace'e bağlı. Yukarıdaki \"Workspace ID\" alanına workspace kimliğini gir (Anthropic Console › Settings › Workspaces)."
+            } else if raw.contains("credit balance") || raw.contains("insufficient") {
+                testResult = "✗ Hesapta kredi yok — Anthropic Console'dan bakiye ekle."
+            } else {
+                testResult = "✗ \(raw)"
+            }
+            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi", detail: raw, ok: false)
         }
     }
 
@@ -55,6 +63,15 @@ struct AISettingsView: View {
                 // "hangisi nereye" karisikligi yaratiyordu.
                 if ai.aiProvider == "claude" {
                     secureRow("Claude API Key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
+                    HStack {
+                        Text("Workspace ID").foregroundStyle(.secondary)
+                        Spacer()
+                        TextField("boş bırakılabilir", text: $ai.claudeWorkspaceId)
+                            .multilineTextAlignment(.trailing)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .font(.callout)
+                    }
                 } else {
                     secureRow("OpenAI API Key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
                 }
@@ -98,7 +115,9 @@ struct AISettingsView: View {
             } header: {
                 Text("\(ai.providerLabel) anahtarı · \(ai.modelLabel)")
             } footer: {
-                Text("Yukarıda seçili sağlayıcının anahtarı. Keychain'de saklanır. \"Test et\" küçük bir istek atar — anahtar geçerli mi hemen görürsün. Sağlayıcıyı değiştirirsen o sağlayıcının kutusu gelir.")
+                Text(ai.aiProvider == "claude"
+                     ? "Anahtar Keychain'de saklanır. Workspace ID sadece bir workspace'e bağlı (identity-linked) anahtarlar için gerekir — normal anahtarlarda boş bırak. \"Test et\" küçük bir istek atar."
+                     : "Anahtar Keychain'de saklanır. \"Test et\" küçük bir istek atar — anahtar geçerli mi hemen görürsün.")
             }
 
             Section {

@@ -27,6 +27,11 @@ final class AppSettings: ObservableObject {
     @Published var claudeKey: String = Keychain.get("claudeApiKey") {
         didSet { Keychain.set(claudeKey, for: "claudeApiKey") }
     }
+    /// Workspace'e bagli (identity-linked) Anthropic anahtarlari `anthropic-workspace-id`
+    /// basligi olmadan 400 doner. Sir degil, bir kimlik — UserDefaults yeterli.
+    @Published var claudeWorkspaceId: String = UserDefaults.standard.string(forKey: "claudeWorkspaceId") ?? "" {
+        didSet { UserDefaults.standard.set(claudeWorkspaceId, forKey: "claudeWorkspaceId") }
+    }
 
     @Published var commands: [FixCommand] = AppSettings.loadCommands() {
         didSet { AppSettings.saveCommands(commands) }

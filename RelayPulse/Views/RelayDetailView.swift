@@ -129,7 +129,8 @@ struct RelayDetailView: View {
 
         do {
             let s = try await AIFixer.analyze(server: server, errorMessage: errMsg, logs: logs,
-                                              commands: ai.commands, provider: ai.aiProvider, key: ai.activeKey)
+                                              commands: ai.commands, provider: ai.aiProvider,
+                                              key: ai.activeKey, workspaceId: ai.claudeWorkspaceId)
             let cmdName = ai.commands.first(where: { $0.id == s.commandId })?.name ?? "(komut önerilmedi)"
             AILog.shared.add(kind: .analyze, relay: server.name, title: "Teşhis: \(cmdName)",
                              detail: "Hata: \(errMsg)\n\nGerekçe: \(s.reason)", ok: true)
