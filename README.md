@@ -1,43 +1,72 @@
-# RelayPulse iOS
+# RelayPulse for iPhone
 
-Anyone Protocol relay filosunu iPhone'dan izlemek için native SwiftUI uygulaması.
-**Yalnızca izleme** — auto-fix, SSH, yapılandırma değişikliği yok (bunlar Mac/Pi RelayPulse'ta).
+Monitor your [Anyone Protocol](https://anyone.io) relay fleet from your iPhone. Real-time status, SSH tools, AI diagnostics — in your pocket.
 
-## Mimari
+## Features
 
-Standalone: uygulama **her relay'in HTTPS agent'ına doğrudan** bağlanır. Pi/Mac backend yok.
+- **Real-time monitoring** — polls each relay's HTTPS agent every 2 minutes (configurable), color-coded Online / Warning / Stale / Offline cards
+- **Fleet Health** — see relays needing attention, RAM / disk / CPU hot lists at a glance
+- **SSH tools** — Nyx relay stats, logs, htop summary, and anonrc editor over SSH
+- **AI Diagnostics** — tap "Diagnose with AI" on any relay card; the model reads logs and suggests a fix command (OpenAI or Claude)
+- **14-day free trial**, then a one-time license key (same format as desktop RelayPulse)
 
-- `GET https://<host>:19191/metrics`  ·  header `X-Agent-Token: <token>`  ·  6s timeout
-- Self-signed sertifika kabul (`AgentClient` URLSession delegate)
-- Sağlıklı = anon servisi `active`/`activating` VEYA relay portu dinliyor
-- Flap dampening: 1 başarısız poll → `stale` (sarı), `offlineAfter`+ → `offline` (kırmızı)
-- rx/tx Mbps ve CPU% ardışık iki poll'un deltasından hesaplanır (Mac `monitor.js` ile aynı)
+## Requirements
 
-## Filo tanımını alma
+- iPhone running iOS 17.0+
+- Anyone Protocol relay fleet with [agent.py](https://github.com/barisadiy1974-hub/relaypulse-app) installed (`port 19191`)
+- A dedicated ed25519 SSH key (phone-only — never share your fleet keys)
 
-Mac RelayPulse → **Ayarlar → İzleme → iPhone → "iPhone'a Aktar…"** bir JSON üretir
-(host + agent portu + çözülmüş token). AirDrop ile telefona at, uygulamada **İçe Aktar**.
-`Documents/fleet.json` olarak saklanır (cihaz kilitliyken şifreli).
+## Setup
 
-## Derleme
+### 1. Export your fleet from desktop RelayPulse
+
+In the Mac / Linux app: **Tools → Export to iPhone** — saves a JSON you AirDrop or copy to the phone.
+
+### 2. Import on iPhone
+
+Open the app → tap **Import JSON** → pick the exported file. All relays load instantly.
+
+### 3. Add an SSH key (for tools)
+
+**Tools → SSH Key** → paste an unencrypted ed25519 private key dedicated to this phone. Generate one:
 
 ```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_relaypulse_iphone -C "relaypulse-iphone" -N ""
+# Copy the public key to each relay's authorized_keys:
+ssh-copy-id -i ~/.ssh/id_ed25519_relaypulse_iphone.pub root@<relay-host>
+```
+
+### 4. Add an AI key (optional)
+
+**Settings → AI Settings** — paste an OpenAI or Anthropic API key. Used only for on-demand "Diagnose with AI" — never runs automatically.
+
+## Architecture
+
+| Component | Description |
+|-----------|-------------|
+| `Net/AgentClient.swift` | HTTPS polling to each relay's agent (port 19191, self-signed cert OK) |
+| `Net/SSHRunner.swift` | Apple swift-nio-ssh, ed25519 auth, command exec |
+| `Net/AIFixer.swift` | OpenAI gpt-4o-mini / Claude claude-haiku-4-5 diagnosis |
+| `Store/FleetStore.swift` | Poll loop, flap dampening, metric delta calc |
+| `Store/LicenseStore.swift` | Ed25519 offline license verification (14-day trial) |
+
+**SSH library:** Apple's official [swift-nio-ssh](https://github.com/apple/swift-nio-ssh) — no third-party forks.
+
+**Security:** relay IPs, tokens, and SSH keys never appear in this repo. The phone SSH key is stored in the iOS Keychain; the fleet definition is encrypted at rest (FileProtectionType.complete).
+
+## Building
+
+```bash
+# Install xcodegen if needed
 brew install xcodegen
+
+cd RelayPulse-iOS
 xcodegen generate
 open RelayPulse.xcodeproj
 ```
 
-Bundle ID: `com.baris.relaypulse` · Deployment target: iOS 17.0
+Build target: `RelayPulse` → your iPhone or simulator.
 
-## Dosya yapısı
+## License
 
-```
-RelayPulse/
-  RelayPulseApp.swift      @main + scenePhase poll aç/kapa
-  Models/                  Server, AgentMetrics, RelayStatus
-  Net/AgentClient.swift    URLSession + self-signed + X-Agent-Token
-  Store/
-    FleetStore.swift       poll döngüsü, delta hesabı, flap dampening
-    ServerStorage.swift     Documents/fleet.json persist
-  Views/                   Dashboard, RelayCard, RelayDetail, Import, Settings
-```
+14-day free trial. License keys sold at [relaypulse.app](https://barisadiy1974-hub.github.io/relaypulse) — same key works on iOS and desktop.
