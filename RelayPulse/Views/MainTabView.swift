@@ -1,25 +1,64 @@
 import SwiftUI
 
-/// Top-level tabs: Relays · Fleet Health · Wallets · Tools · Settings.
+/// Root menu. Mirrors the Mac app's sidebar one-for-one, in the same order and
+/// with the same labels: Relays · Overview · Wallets · Anyone Dashboard · Nyx ·
+/// Htop · Tools · Settings · Relay Config.
+///
+/// The Mac opens Nyx/Htop in a Terminal window (they are curses programs). iOS
+/// has no terminal, so those two run the same checks natively via ToolRunnerView.
 struct MainTabView: View {
+    @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
+
+    private static let dashboard = URL(string: "https://dashboard.anyone.io")!
+
     var body: some View {
-        TabView {
-            DashboardView()
-                .tabItem { Label("Relays", systemImage: "antenna.radiowaves.left.and.right") }
+        NavigationStack {
+            List {
+                Section {
+                    row("Relays", "antenna.radiowaves.left.and.right",
+                        badge: fleet.servers.count) { DashboardView() }
+                    row("Overview", "newspaper") { OverviewView() }
+                    row("Wallets", "wallet.bifold") {
+                        WebDashboardView(title: "Wallets", url: Self.dashboard)
+                    }
+                    row("Anyone Dashboard", "chart.bar.doc.horizontal") {
+                        WebDashboardView(title: "Anyone Dashboard", url: Self.dashboard)
+                    }
+                }
 
-            FleetHealthView()
-                .tabItem { Label("Fleet Health", systemImage: "waveform.path.ecg") }
+                Section {
+                    row("Nyx", "chart.xyaxis.line") { ToolRunnerView(kind: .nyx) }
+                    row("Htop", "cpu") { ToolRunnerView(kind: .htop) }
+                    row("Fleet Health", "waveform.path.ecg") { FleetHealthView() }
+                    row("Tools", "wrench.and.screwdriver") { ToolsView() }
+                }
 
-            NavigationStack {
-                WebDashboardView(title: "Wallets", url: URL(string: "https://dashboard.anyone.io")!)
+                Section {
+                    row("Relay Config", "doc.badge.gearshape") { RelayConfigView() }
+                    row("Settings", "gearshape") { SettingsView() }
+                }
             }
-            .tabItem { Label("Wallets", systemImage: "wallet.bifold") }
+            .navigationTitle("RelayPulse")
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg(scheme))
+        }
+    }
 
-            NavigationStack { ToolsView() }
-                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
-
-            NavigationStack { SettingsView() }
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+    @ViewBuilder
+    private func row<D: View>(_ title: String, _ icon: String, badge: Int? = nil,
+                              @ViewBuilder destination: @escaping () -> D) -> some View {
+        NavigationLink { destination() } label: {
+            HStack {
+                Label(title, systemImage: icon)
+                if let badge {
+                    Spacer()
+                    Text("\(badge)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(Theme.muted(scheme))
+                }
+            }
         }
     }
 }
