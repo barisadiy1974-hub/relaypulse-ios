@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Mac RelayPulse .card ile aynı görünüm — dikey, iPhone'a uyarlanmış.
+/// One relay card. Mirrors the desktop RelayPulse `.card` look, stacked for iPhone.
 struct RelayCardView: View {
     @Environment(\.colorScheme) private var scheme
     let server: Server
@@ -12,7 +12,6 @@ struct RelayCardView: View {
         PanelCard(stateColor: status.state == .online ? Theme.ok(scheme) : sc,
                   dimmed: status.state == .stale || status.state == .offline) {
             VStack(alignment: .leading, spacing: 6) {
-                // Başlık satırı
                 HStack(spacing: 8) {
                     Circle().fill(sc).frame(width: 9, height: 9)
                     Text(server.name)
@@ -46,7 +45,7 @@ struct RelayCardView: View {
                 } else {
                     HStack(spacing: 0) {
                         metric("anon", status.anonLabel, status.anonHealthy ? Theme.ok(scheme) : Theme.warn(scheme))
-                        metric("bağ", status.conn.map { "\($0)" } ?? "—", Theme.text(scheme))
+                        metric("conn", status.conn.map { "\($0)" } ?? "—", Theme.text(scheme))
                         metric("↓ Mbps", fmt(status.rxMbps), Theme.rx(scheme))
                         metric("↑ Mbps", fmt(status.txMbps), Theme.tx(scheme))
                         metric("cpu", status.cpuPct.map { "\(Int($0))%" } ?? "—", Theme.text(scheme))

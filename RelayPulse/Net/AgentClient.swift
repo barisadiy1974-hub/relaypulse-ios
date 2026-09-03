@@ -10,27 +10,28 @@ enum AgentError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badToken:        return "Agent token hatali (403)"
+        case .badToken:        return "Agent token rejected (403)"
         case .http(let c):     return "HTTP \(c)"
-        case .timeout:         return "Zaman asimi (6s)"
+        case .timeout:         return "Timed out"
         case .transport(let m): return m
-        case .decode(let m):   return "JSON cozulemedi: \(m)"
-        case .noURL:           return "Gecersiz adres"
+        case .decode(let m):   return "Could not decode JSON: \(m)"
+        case .noURL:           return "Invalid address"
         }
     }
 }
 
-/// Her relay'in HTTPS agent'ina dogrudan baglanir. Backend (Pi/Mac) yok.
-/// Self-signed sertifikalar kabul edilir; kimlik X-Agent-Token ile dogrulanir.
+/// Connects straight to each relay's HTTPS agent — no backend in between.
+/// Self-signed certificates are accepted; identity is proven by X-Agent-Token.
 final class AgentClient: NSObject, URLSessionDelegate {
     static let shared = AgentClient()
 
     private lazy var session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
-        // agent.py düz HTTP/1.1 (Python http.server + TLS soketi) — HTTP/3 yok.
-        // QUIC yarışı request seviyesinde kapatılıyor (fetchOnce'ta
-        // req.assumesHTTP3Capable = false); yoksa 143 host'a paralel taramada
-        // boşa QUIC denemesi + TCP'ye düşme gecikmesi geçici "sarı" üretiyor.
+        // The agent speaks plain HTTP/1.1 (Python http.server + a TLS socket) —
+        // no HTTP/3. The QUIC race is disabled per request (see
+        // req.assumesHTTP3Capable in fetchOnce); otherwise, sweeping a large
+        // fleet in parallel wastes time on QUIC attempts that fall back to TCP,
+        // which showed up as spurious "stale" cards.
         cfg.timeoutIntervalForRequest = 12
         cfg.timeoutIntervalForResource = 16
         cfg.waitsForConnectivity = false
@@ -39,8 +40,8 @@ final class AgentClient: NSObject, URLSessionDelegate {
         return URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
     }()
 
-    /// Geçici hata (timeout / bağlantı) durumunda bir kez daha dener — Mac'in SSH
-    /// retry'ına denk. Kalıcı hatalar (403, HTTP 4xx/5xx, parse) tekrar denenmez.
+    /// Retries once on a transient failure (timeout / connection), mirroring the
+    /// desktop SSH retry. Permanent failures (403, HTTP 4xx/5xx, parse) are not retried.
     func fetch(_ server: Server) async throws -> AgentMetrics {
         do {
             return try await fetchOnce(server)
@@ -88,7 +89,7 @@ final class AgentClient: NSObject, URLSessionDelegate {
         }
     }
 
-    // MARK: - Self-signed sertifika kabulu
+    // MARK: - Accept self-signed certificates
     func urlSession(_ session: URLSession,
                     didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {

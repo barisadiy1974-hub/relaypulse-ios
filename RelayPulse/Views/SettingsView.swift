@@ -9,6 +9,9 @@ struct SettingsView: View {
     @State private var editing: Server?
     @State private var showClearConfirm = false
     @State private var error: String?
+    @State private var licenseState = LicenseStore.state
+    @State private var licenseInput = ""
+    @State private var licenseError = ""
 
     private let intervals = [30, 60, 120, 300, 600]
 
@@ -34,42 +37,76 @@ struct SettingsView: View {
                     idx.map { fleet.servers[$0].name }.forEach { fleet.removeServer(named: $0) }
                 }
                 Button { showAdd = true } label: {
-                    Label("Relay ekle", systemImage: "plus")
+                    Label("Add relay", systemImage: "plus")
                 }
                 Button { showPicker = true } label: {
-                    Label("JSON içe aktar", systemImage: "square.and.arrow.down")
+                    Label("Import JSON", systemImage: "square.and.arrow.down")
                 }
             } header: {
-                Text("Relay'ler (\(fleet.servers.count))")
+                Text("Relays (\(fleet.servers.count))")
             }
 
-            Section("İzleme") {
-                Picker("Tarama aralığı", selection: Binding(
+            Section("Monitoring") {
+                Picker("Poll interval", selection: Binding(
                     get: { fleet.pollSec },
                     set: { fleet.pollSec = $0; fleet.persistSettings() })) {
                     ForEach(intervals, id: \.self) { s in
-                        Text(s < 60 ? "\(s) sn" : "\(s / 60) dk").tag(s)
+                        Text(s < 60 ? "\(s) sec" : "\(s / 60) min").tag(s)
                     }
                 }
-                Stepper("Çevrimdışı eşiği: \(fleet.offlineAfter) hata", value: Binding(
+                Stepper("Offline after \(fleet.offlineAfter) failures", value: Binding(
                     get: { fleet.offlineAfter },
                     set: { fleet.offlineAfter = $0; fleet.persistSettings() }), in: 1...5)
             }
 
             if let error {
-                Section { Text(error).foregroundStyle(.red).font(.footnote) }
+                Section { Text(error).foregroundStyle(Theme.err(scheme)).font(.footnote) }
+            }
+
+            Section("License") {
+                switch licenseState {
+                case .licensed(let serial):
+                    LabeledContent("Status", value: "Licensed")
+                    LabeledContent("Serial", value: serial.uppercased())
+                    Button(role: .destructive) {
+                        LicenseStore.deactivate()
+                        licenseState = LicenseStore.state
+                    } label: { Text("Remove license") }
+                case .trial(let daysLeft):
+                    LabeledContent("Status", value: "\(daysLeft) day\(daysLeft == 1 ? "" : "s") left in trial")
+                    TextField("RP1-XXXXXXXX-…", text: $licenseInput)
+                        .font(.system(.body, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.characters)
+                    if !licenseError.isEmpty {
+                        Text(licenseError).font(.caption).foregroundStyle(Theme.err(scheme))
+                    }
+                    Button("Activate license") { activateLicense() }
+                        .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                case .expired:
+                    LabeledContent("Status", value: "Trial expired")
+                    TextField("RP1-XXXXXXXX-…", text: $licenseInput)
+                        .font(.system(.body, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.characters)
+                    if !licenseError.isEmpty {
+                        Text(licenseError).font(.caption).foregroundStyle(Theme.err(scheme))
+                    }
+                    Button("Activate license") { activateLicense() }
+                        .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
 
             Section {
                 Button(role: .destructive) { showClearConfirm = true } label: {
-                    Label("Tüm relay'leri temizle", systemImage: "trash")
+                    Label("Remove all relays", systemImage: "trash")
                 }
-                LabeledContent("Sürüm", value: appVersion)
+                LabeledContent("Version", value: appVersion)
             } footer: {
-                Text("İzleme + Anyone panelleri. 7/24 otomatik auto-fix Mac/Pi RelayPulse'ta kalır — iOS arka planda çalıştıramaz.")
+                Text("Monitoring plus on-demand tools. Unattended 24/7 auto-fix stays on desktop RelayPulse — iOS suspends background apps, so a phone cannot do it reliably.")
             }
         }
-        .navigationTitle("Ayarlar")
+        .navigationTitle("Settings")
         .sheet(isPresented: $showAdd) { ServerEditView(mode: .add) }
         .sheet(item: $editing) { s in ServerEditView(mode: .edit(s)) }
         .fileImporter(isPresented: $showPicker,
@@ -84,9 +121,20 @@ struct SettingsView: View {
                 error = e.localizedDescription
             }
         }
-        .confirmationDialog("Tüm relay tanımları silinsin mi?", isPresented: $showClearConfirm, titleVisibility: .visible) {
-            Button("Sil", role: .destructive) { fleet.clearConfig() }
-            Button("Vazgeç", role: .cancel) {}
+        .confirmationDialog("Remove every relay definition?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) { fleet.clearConfig() }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func activateLicense() {
+        let k = licenseInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if LicenseStore.activate(k) {
+            licenseState = LicenseStore.state
+            licenseInput = ""
+            licenseError = ""
+        } else {
+            licenseError = "Invalid license key."
         }
     }
 

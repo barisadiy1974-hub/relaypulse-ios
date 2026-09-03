@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Telefonun SSH anahtarı — Araçlar'ın (nyx/htop/anonrc/Düzelt) çalışması için gerekli.
+/// The phone's SSH key — required for Nyx / htop / anonrc / fix commands.
 struct SSHSettingsView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
@@ -18,38 +18,38 @@ struct SSHSettingsView: View {
         Form {
             Section {
                 if hasKey {
-                    LabeledContent("Durum") {
-                        Label("Anahtar yüklü", systemImage: "checkmark.seal.fill")
+                    LabeledContent("Status") {
+                        Label("Key loaded", systemImage: "checkmark.seal.fill")
                             .foregroundStyle(Theme.ok(scheme))
                     }
                     if let fp = fingerprint {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Parmak izi").font(.caption).foregroundStyle(Theme.muted(scheme))
+                            Text("Fingerprint").font(.caption).foregroundStyle(Theme.muted(scheme))
                             Text(fp).font(.caption2.monospaced()).textSelection(.enabled)
                         }
                     }
                     Button(role: .destructive) {
                         SSHKeyStore.clear(); refresh()
-                    } label: { Label("Anahtarı sil", systemImage: "trash") }
+                    } label: { Label("Remove key", systemImage: "trash") }
                 } else {
-                    Label("Anahtar yok", systemImage: "exclamationmark.triangle.fill")
+                    Label("No key", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(Theme.warn(scheme))
-                    Button { showPaste = true } label: { Label("Anahtarı yapıştır", systemImage: "doc.on.clipboard") }
-                    Button { showPicker = true } label: { Label("Dosyadan içe aktar", systemImage: "doc.badge.arrow.up") }
+                    Button { showPaste = true } label: { Label("Paste key", systemImage: "doc.on.clipboard") }
+                    Button { showPicker = true } label: { Label("Import from file", systemImage: "doc.badge.arrow.up") }
                 }
             } header: {
-                Text("SSH özel anahtarı")
+                Text("SSH private key")
             } footer: {
-                Text("Parolasız ed25519 (OpenSSH formatı). Telefona özel anahtar kullan — kaybolursa sadece onu relay'lerden silersin. Keychain'de, sadece bu cihazda saklanır.")
+                Text("Unencrypted ed25519, OpenSSH format. Use a key dedicated to this phone — if the phone is lost you revoke only that key. Stored in the Keychain, on this device only.")
             }
 
             if hasKey, let first = fleet.servers.first {
-                Section("Bağlantı testi") {
+                Section("Connection test") {
                     Button {
                         Task { await test(first) }
                     } label: {
                         HStack {
-                            Label("\(first.name) üzerinde dene", systemImage: "bolt.horizontal")
+                            Label("Try on \(first.name)", systemImage: "bolt.horizontal")
                             if testing { Spacer(); ProgressView() }
                         }
                     }
@@ -72,12 +72,12 @@ struct SSHSettingsView: View {
                     .font(.system(.caption2, design: .monospaced))
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
                     .padding(8)
-                    .navigationTitle("Özel anahtar")
+                    .navigationTitle("Private key")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { showPaste = false } }
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showPaste = false } }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Kaydet") { save(pasted); pasted = ""; showPaste = false }
+                            Button("Save") { save(pasted); pasted = ""; showPaste = false }
                                 .disabled(pasted.isEmpty)
                         }
                     }
@@ -89,7 +89,7 @@ struct SSHSettingsView: View {
                 let scoped = u.startAccessingSecurityScopedResource()
                 defer { if scoped { u.stopAccessingSecurityScopedResource() } }
                 if let d = try? Data(contentsOf: u), let s = String(data: d, encoding: .utf8) { save(s) }
-                else { error = "Dosya okunamadı" }
+                else { error = "Could not read the file" }
             }
         }
     }
@@ -110,9 +110,9 @@ struct SSHSettingsView: View {
         defer { testing = false }
         do {
             let r = try await SSHRunner.shared.run("hostname; uptime -p", on: s, timeout: 20)
-            testResult = r.combined.isEmpty ? "(çıktı yok, çıkış \(r.exitStatus ?? -1))" : r.combined
+            testResult = r.combined.isEmpty ? "(no output, exit \(r.exitStatus ?? -1))" : r.combined
         } catch {
-            testResult = "HATA: \(error.localizedDescription)"
+            testResult = "ERROR: \(error.localizedDescription)"
         }
     }
 }

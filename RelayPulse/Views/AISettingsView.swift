@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// AI / Auto-Fix ayarları — Mac'teki "AI Auto-Fix" bölümünün iPhone karşılığı.
-/// iPhone'da 7/24 sessiz otomatik YOK; anahtar + komutlar elle "Düzelt" için kullanılır.
+/// AI / Auto-Fix settings. On iPhone there is no unattended auto-fix —
+/// the key and command list power the manual "Diagnose with AI" action.
 struct AISettingsView: View {
     @EnvironmentObject var ai: AppSettings
     @Environment(\.colorScheme) private var scheme
@@ -13,83 +13,49 @@ struct AISettingsView: View {
     @State private var testResult: String?
     @State private var testOK = false
 
-    private func testKey() async {
-        testing = true; testResult = nil
-        defer { testing = false }
-        guard ai.hasKey else {
-            testOK = false
-            testResult = "✗ \(ai.providerLabel) anahtarı boş — yukarıdaki alana gir"
-            return
-        }
-        if let other = ai.keyBelongsToOtherProvider {
-            testOK = false
-            let otherLabel = other == "claude" ? "Claude" : "OpenAI"
-            testResult = "✗ Girdiğin anahtar \(otherLabel) anahtarı (\(other == "claude" ? "sk-ant-" : "sk-") ile başlıyor) ama sağlayıcı \(ai.providerLabel). Yukarıdaki düğmeyle \(otherLabel)'a geç."
-            return
-        }
-        do {
-            let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey,
-                                                 workspaceId: ai.claudeWorkspaceId)
-            testOK = true
-            testResult = "✓ Anahtar geçerli — \(info)"
-            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi", detail: info, ok: true)
-        } catch {
-            testOK = false
-            let raw = error.localizedDescription
-            // Sik gorulen hatalari duz Turkce anlat, ham JSON birakma.
-            if raw.contains("anthropic-workspace-id") {
-                testResult = "✗ Bu anahtar bir workspace'e bağlı. Yukarıdaki \"Workspace ID\" alanına workspace kimliğini gir (Anthropic Console › Settings › Workspaces)."
-            } else if raw.contains("credit balance") || raw.contains("insufficient") {
-                testResult = "✗ Hesapta kredi yok — Anthropic Console'dan bakiye ekle."
-            } else {
-                testResult = "✗ \(raw)"
-            }
-            AILog.shared.add(kind: .test, relay: "—", title: "API anahtarı testi", detail: raw, ok: false)
-        }
-    }
-
     var body: some View {
         Form {
-            Section("Sağlayıcı") {
-                Picker("AI sağlayıcı", selection: $ai.aiProvider) {
+            Section("Provider") {
+                Picker("AI provider", selection: $ai.aiProvider) {
                     Text("OpenAI (gpt-4o-mini)").tag("openai")
                     Text("Claude (haiku)").tag("claude")
                 }
-                Toggle("Sadece teşhis (dry-run)", isOn: $ai.dryRun)
+                Toggle("Diagnosis only (dry-run)", isOn: $ai.dryRun)
             }
 
             Section {
-                // Sadece secili saglayicinin anahtari gosterilir — iki kutu
-                // "hangisi nereye" karisikligi yaratiyordu.
+                // Only the selected provider's field is shown — two boxes made it
+                // unclear which key belonged where.
                 if ai.aiProvider == "claude" {
-                    secureRow("Claude API Key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
+                    secureRow("Claude API key", text: $ai.claudeKey, reveal: $showClaude, placeholder: "sk-ant-…")
                     HStack {
                         Text("Workspace ID").foregroundStyle(.secondary)
                         Spacer()
-                        TextField("boş bırakılabilir", text: $ai.claudeWorkspaceId)
+                        TextField("optional", text: $ai.claudeWorkspaceId)
                             .multilineTextAlignment(.trailing)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .font(.callout)
                     }
                 } else {
-                    secureRow("OpenAI API Key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
+                    secureRow("OpenAI API key", text: $ai.openaiKey, reveal: $showOpenAI, placeholder: "sk-…")
                 }
+
                 Button {
                     Task { await testKey() }
                 } label: {
                     HStack {
-                        Label("Anahtarı test et", systemImage: "bolt.horizontal")
+                        Label("Test key", systemImage: "bolt.horizontal")
                         if testing { Spacer(); ProgressView() }
                     }
                 }
                 .disabled(testing)
 
-                // Yanlis kutuya yapistirilan anahtari API'ye gitmeden yakala.
+                // Catch a key pasted into the wrong provider before it hits the API.
                 if let other = ai.keyBelongsToOtherProvider {
                     let otherLabel = other == "claude" ? "Claude" : "OpenAI"
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Bu bir \(otherLabel) anahtarı, \(ai.providerLabel) kutusunda.",
+                        Label("This is a \(otherLabel) key in the \(ai.providerLabel) field.",
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(Theme.warn(scheme))
@@ -100,7 +66,7 @@ struct AISettingsView: View {
                             ai.aiProvider = other
                             testResult = nil
                         } label: {
-                            Label("\(otherLabel)'a geç ve anahtarı taşı", systemImage: "arrow.left.arrow.right")
+                            Label("Switch to \(otherLabel) and move the key", systemImage: "arrow.left.arrow.right")
                                 .font(.footnote.weight(.semibold))
                         }
                     }
@@ -113,23 +79,23 @@ struct AISettingsView: View {
                         .textSelection(.enabled)
                 }
             } header: {
-                Text("\(ai.providerLabel) anahtarı · \(ai.modelLabel)")
+                Text("\(ai.providerLabel) key · \(ai.modelLabel)")
             } footer: {
                 Text(ai.aiProvider == "claude"
-                     ? "Anahtar Keychain'de saklanır. Workspace ID sadece bir workspace'e bağlı (identity-linked) anahtarlar için gerekir — normal anahtarlarda boş bırak. \"Test et\" küçük bir istek atar."
-                     : "Anahtar Keychain'de saklanır. \"Test et\" küçük bir istek atar — anahtar geçerli mi hemen görürsün.")
+                     ? "Stored in the Keychain. Workspace ID is only needed for workspace-scoped (identity-linked) keys — leave it empty otherwise. \"Test key\" sends one tiny request."
+                     : "Stored in the Keychain. \"Test key\" sends one tiny request so you know immediately whether the key works.")
             }
 
             Section {
                 NavigationLink { AILogView() } label: {
                     HStack {
-                        Label("AI kaydı / hatalar", systemImage: "list.bullet.rectangle")
+                        Label("Activity log / errors", systemImage: "list.bullet.rectangle")
                         Spacer()
                         Text("\(AILog.shared.entries.count)").foregroundStyle(Theme.muted(scheme))
                     }
                 }
             } footer: {
-                Text("Yapılan teşhisler, çalıştırılan komutlar ve hatalar burada tutulur.")
+                Text("Diagnoses, commands that ran, and errors are kept here.")
             }
 
             Section {
@@ -143,24 +109,60 @@ struct AISettingsView: View {
                     }
                 }
                 .onDelete { ai.commands.remove(atOffsets: $0) }
-                Button { showAddCmd = true } label: { Label("Komut ekle", systemImage: "plus") }
-                Button("Varsayılanlara döndür") { ai.resetCommands() }
+                Button { showAddCmd = true } label: { Label("Add command", systemImage: "plus") }
+                Button("Restore defaults") { ai.resetCommands() }
                     .foregroundStyle(Theme.err(scheme))
             } header: {
-                Text("Düzeltme komutları (\(ai.commands.count))")
+                Text("Fix commands (\(ai.commands.count))")
             } footer: {
-                Text("Mac RelayPulse ile aynı 7 varsayılan. Kırmızı relay'de \"Düzelt\" bu listeden seçer.")
+                Text("Same seven defaults as desktop RelayPulse. \"Diagnose with AI\" picks from this list.")
             }
         }
         .navigationTitle("AI / Auto-Fix")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $editing) { c in CommandEditor(command: c) { updated in
-            if let i = ai.commands.firstIndex(where: { $0.id == c.id }) { ai.commands[i] = updated }
-        }}
+        .sheet(item: $editing) { c in
+            CommandEditor(command: c) { updated in
+                if let i = ai.commands.firstIndex(where: { $0.id == c.id }) { ai.commands[i] = updated }
+            }
+        }
         .sheet(isPresented: $showAddCmd) {
             CommandEditor(command: FixCommand(id: (ai.commands.map(\.id).max() ?? 0) + 1, name: "", command: "")) { new in
                 ai.commands.append(new)
             }
+        }
+    }
+
+    private func testKey() async {
+        testing = true; testResult = nil
+        defer { testing = false }
+        guard ai.hasKey else {
+            testOK = false
+            testResult = "✗ \(ai.providerLabel) key is empty — enter it above."
+            return
+        }
+        if let other = ai.keyBelongsToOtherProvider {
+            testOK = false
+            let otherLabel = other == "claude" ? "Claude" : "OpenAI"
+            testResult = "✗ That is a \(otherLabel) key (starts with \(other == "claude" ? "sk-ant-" : "sk-")) but the provider is \(ai.providerLabel). Use the switch button above."
+            return
+        }
+        do {
+            let info = try await AIFixer.testKey(provider: ai.aiProvider, key: ai.activeKey,
+                                                 workspaceId: ai.claudeWorkspaceId)
+            testOK = true
+            testResult = "✓ Key works — \(info)"
+            AILog.shared.add(kind: .test, relay: "—", title: "API key test", detail: info, ok: true)
+        } catch {
+            testOK = false
+            let raw = error.localizedDescription
+            if raw.contains("anthropic-workspace-id") {
+                testResult = "✗ This key is scoped to a workspace. Enter its ID in \"Workspace ID\" above (Anthropic Console › Settings › Workspaces) — it looks like wrkspc_…, not the workspace name."
+            } else if raw.contains("credit balance") || raw.contains("insufficient") {
+                testResult = "✗ No credit on the account — add balance in the provider console."
+            } else {
+                testResult = "✗ \(raw)"
+            }
+            AILog.shared.add(kind: .test, relay: "—", title: "API key test", detail: raw, ok: false)
         }
     }
 
@@ -187,8 +189,8 @@ private struct CommandEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Ad", text: $command.name)
-                Section("Komut (bash, relay'de root olarak çalışır)") {
+                TextField("Name", text: $command.name)
+                Section("Command (bash, runs as root on the relay)") {
                     TextEditor(text: $command.command)
                         .font(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 120)
@@ -196,12 +198,12 @@ private struct CommandEditor: View {
                         .textInputAutocapitalization(.never)
                 }
             }
-            .navigationTitle("Komut")
+            .navigationTitle("Command")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { onSave(command); dismiss() }
+                    Button("Save") { onSave(command); dismiss() }
                         .disabled(command.name.isEmpty || command.command.isEmpty)
                 }
             }

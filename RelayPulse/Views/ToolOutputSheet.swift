@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Bir araç/komut çıktısı.
+/// Output of one tool or command.
 struct ToolOutput: Identifiable {
     let id = UUID()
     let title: String
@@ -8,7 +8,7 @@ struct ToolOutput: Identifiable {
     let failed: Bool
 }
 
-/// Çıktıyı tam ekran, seçilebilir ve paylaşılabilir gösterir.
+/// Shows the output full screen, selectable and shareable.
 struct ToolOutputSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -28,7 +28,7 @@ struct ToolOutputSheet: View {
             .navigationTitle(output.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Kapat") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } }
                 ToolbarItem(placement: .topBarLeading) {
                     ShareLink(item: output.text) { Image(systemName: "square.and.arrow.up") }
                 }

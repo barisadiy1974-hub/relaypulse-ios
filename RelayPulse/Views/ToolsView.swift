@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Araçlar — Mac RelayPulse'un Araçlar sekmesiyle aynı yapı:
-/// Nyx / htop / Log / HTTPS / Config her biri kendi sunucu seçicisiyle, ayrı.
+/// Tools — mirrors the desktop RelayPulse Tools tab: Nyx / htop / log / HTTPS /
+/// config, each with its own server picker.
 struct ToolsView: View {
     @EnvironmentObject var fleet: FleetStore
     @EnvironmentObject var ai: AppSettings
@@ -9,7 +9,7 @@ struct ToolsView: View {
 
     var body: some View {
         List {
-            Section("Araçlar") {
+            Section("Tools") {
                 ForEach(ToolRunnerView.Kind.allCases) { k in
                     NavigationLink {
                         ToolRunnerView(kind: k)
@@ -20,33 +20,33 @@ struct ToolsView: View {
                 NavigationLink {
                     AnonrcPickerView()
                 } label: {
-                    row("Config (anonrc)", "Relay yapılandırmasını oku ve yaz",
+                    row("Config (anonrc)", "Read and write the relay configuration",
                         "slider.horizontal.3", Theme.accent(scheme))
                 }
             }
 
-            Section("Kurulum") {
+            Section("Setup") {
                 NavigationLink {
                     AISettingsView()
                 } label: {
-                    row("AI API anahtarı ve komutlar",
-                        ai.hasKey ? "\(ai.providerLabel) · anahtar var · \(ai.commands.count) komut"
-                                  : "\(ai.providerLabel) anahtarı girilmedi",
+                    row("AI API key and commands",
+                        ai.hasKey ? "\(ai.providerLabel) · key set · \(ai.commands.count) commands"
+                                  : "No \(ai.providerLabel) key yet",
                         "key.horizontal",
                         ai.hasKey ? Theme.ok(scheme) : Theme.warn(scheme))
                 }
                 NavigationLink {
                     SSHSettingsView()
                 } label: {
-                    row("SSH anahtarı",
-                        SSHKeyStore.hasKey ? "Yüklü — araçlar çalışır" : "Yok — araçlar çalışmaz",
+                    row("SSH key",
+                        SSHKeyStore.hasKey ? "Loaded — tools work" : "Missing — tools will not run",
                         "terminal",
                         SSHKeyStore.hasKey ? Theme.ok(scheme) : Theme.warn(scheme))
                 }
                 NavigationLink {
                     AILogView()
                 } label: {
-                    row("AI kaydı / hatalar", "Teşhisler, çalıştırılan komutlar, hatalar",
+                    row("Activity log / errors", "Diagnoses, commands that ran, errors",
                         "list.bullet.rectangle", Theme.muted(scheme))
                 }
             }
@@ -66,12 +66,12 @@ struct ToolsView: View {
                     }
                 }
             } header: {
-                Text("Relay başına")
+                Text("Per relay")
             } footer: {
-                Text("Tek relay için tüm araçlar + düzeltme komutları bir arada.")
+                Text("Every tool plus the fix commands, scoped to one relay.")
             }
         }
-        .navigationTitle("Araçlar")
+        .navigationTitle("Tools")
     }
 
     private func row(_ title: String, _ sub: String, _ icon: String, _ tint: Color) -> some View {

@@ -2,11 +2,11 @@ import SwiftUI
 
 struct RelayDetailView: View {
     @EnvironmentObject var fleet: FleetStore
-    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var ai: AppSettings
+    @Environment(\.colorScheme) private var scheme
     let server: Server
     @State private var showEdit = false
-    @State private var fixing = false
+    @State private var diagnosing = false
     @State private var suggestion: AIFixer.Suggestion?
     @State private var output: ToolOutput?
 
@@ -23,10 +23,11 @@ struct RelayDetailView: View {
                             Circle().fill(sc).frame(width: 10, height: 10)
                             Text(status.state.label).font(.headline).foregroundStyle(sc)
                             Spacer()
-                            Text(status.ageText + " önce").font(.caption).foregroundStyle(Theme.muted(scheme))
+                            Text(status.ageText + " ago").font(.caption).foregroundStyle(Theme.muted(scheme))
                         }
                         if status.fails > 0 {
-                            Text("\(status.fails) ardışık başarısız poll").font(.caption).foregroundStyle(Theme.warn(scheme))
+                            Text("\(status.fails) consecutive failed polls")
+                                .font(.caption).foregroundStyle(Theme.warn(scheme))
                         }
                         if let e = status.lastError {
                             Text(e).font(.caption).foregroundStyle(Theme.err(scheme))
@@ -36,19 +37,19 @@ struct RelayDetailView: View {
                                 Task { await diagnose() }
                             } label: {
                                 HStack {
-                                    Label(fixing ? "Teşhis ediliyor…" : "AI ile teşhis et", systemImage: "sparkles")
-                                    if fixing { Spacer(); ProgressView() }
+                                    Label(diagnosing ? "Diagnosing…" : "Diagnose with AI", systemImage: "sparkles")
+                                    if diagnosing { Spacer(); ProgressView() }
                                 }
                                 .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(fixing)
+                            .disabled(diagnosing)
                             .padding(.top, 4)
                         }
                     }
                 }
 
-                // Mac kartındaki hızlı butonlar: Nyx · Log · HTTPS (+ AI teşhis yukarıda)
+                // Quick actions, same set as the desktop relay card.
                 PanelCard {
                     HStack(spacing: 8) {
                         actionLink(.nyx, "Nyx")
@@ -60,23 +61,23 @@ struct RelayDetailView: View {
                     }
                 }
 
-                infoCard("Metrikler", [
-                    ("anon servisi", status.anonLabel),
-                    ("Bağlantı", status.conn.map { "\($0)" } ?? "—"),
-                    ("İndirme", mbps(status.rxMbps)),
-                    ("Yükleme", mbps(status.txMbps)),
-                    ("CPU", (status.cpuPct.map { "\(Int($0))%" } ?? "—") + (status.cpuCount.map { " · \($0) çekirdek" } ?? "")),
+                infoCard("Metrics", [
+                    ("anon service", status.anonLabel),
+                    ("Connections", status.conn.map { "\($0)" } ?? "—"),
+                    ("Download", mbps(status.rxMbps)),
+                    ("Upload", mbps(status.txMbps)),
+                    ("CPU", (status.cpuPct.map { "\(Int($0))%" } ?? pending) + (status.cpuCount.map { " · \($0) cores" } ?? "")),
                     ("RAM", status.memPct.map { "\(Int($0))%" } ?? "—"),
                     ("Disk", status.diskPct.map { "\(Int($0))%" } ?? "—"),
-                    ("Yük ort.", status.load.map { l in l.count == 3 ? String(format: "%.2f  %.2f  %.2f", l[0], l[1], l[2]) : "—" } ?? "—"),
+                    ("Load avg", status.load.map { l in l.count == 3 ? String(format: "%.2f  %.2f  %.2f", l[0], l[1], l[2]) : "—" } ?? "—"),
                     ("Uptime", status.uptime ?? "—"),
                 ])
 
-                infoCard("Sunucu", [
+                infoCard("Server", [
                     ("Host", "\(server.host):\(server.agentPort)"),
-                    ("Şema", server.agentScheme.uppercased()),
+                    ("Scheme", server.agentScheme.uppercased()),
                     ("Public IP", status.publicIp ?? "—"),
-                    ("Cüzdan", server.wallet.isEmpty ? "—" : server.wallet),
+                    ("Wallet", server.wallet.isEmpty ? "—" : server.wallet),
                 ])
             }
             .padding(12)
@@ -86,44 +87,46 @@ struct RelayDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Düzenle") { showEdit = true }
+                Button("Edit") { showEdit = true }
             }
         }
         .sheet(isPresented: $showEdit) { ServerEditView(mode: .edit(server)) }
         .sheet(item: $output) { o in ToolOutputSheet(output: o) }
-        .alert("AI teşhisi", isPresented: Binding(get: { suggestion != nil }, set: { if !$0 { suggestion = nil } })) {
+        .alert("AI diagnosis", isPresented: Binding(get: { suggestion != nil }, set: { if !$0 { suggestion = nil } })) {
             if let s = suggestion, let cmd = ai.commands.first(where: { $0.id == s.commandId }) {
-                Button(ai.dryRun ? "Sadece teşhis (dry-run açık)" : "\"\(cmd.name)\" çalıştır",
+                Button(ai.dryRun ? "Diagnosis only (dry-run on)" : "Run \"\(cmd.name)\"",
                        role: ai.dryRun ? .cancel : .destructive) {
                     if !ai.dryRun { Task { await run(cmd) } }
                     suggestion = nil
                 }
-                Button("Kapat", role: .cancel) { suggestion = nil }
+                Button("Close", role: .cancel) { suggestion = nil }
             } else {
-                Button("Tamam", role: .cancel) { suggestion = nil }
+                Button("OK", role: .cancel) { suggestion = nil }
             }
         } message: {
             if let s = suggestion {
-                Text(s.reason.isEmpty ? "Model bir komut önermedi." : s.reason)
+                Text(s.reason.isEmpty ? "The model did not suggest a command." : s.reason)
             }
         }
         .refreshable { await fleet.sweep() }
     }
 
-    /// SSH ile son logları çeker, AI'a gönderir, önerilen komutu gösterir. Kendiliğinden çalıştırmaz.
-    private func diagnose() async {
-        fixing = true
-        defer { fixing = false }
-        let errMsg = status.lastError ?? (status.anonHealthy ? "durum: \(status.state.rawValue)" : "anon servisi \(status.anonLabel)")
+    /// Rate metrics need two polls to produce a delta; say so instead of showing a bare dash.
+    private var pending: String { status.lastUpdated == nil ? "—" : "calculating…" }
 
-        var logs = "(log alinamadi)"
+    /// Pulls recent logs over SSH, sends them to the model, shows the suggested
+    /// command. Never runs anything on its own.
+    private func diagnose() async {
+        diagnosing = true
+        defer { diagnosing = false }
+        let errMsg = status.lastError ?? (status.anonHealthy ? "state: \(status.state.rawValue)" : "anon service \(status.anonLabel)")
+
+        var logs = "(no logs)"
         do {
-            let r = try await SSHRunner.shared.run(
-                "journalctl -u anon -n 100 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 100 --no-pager 2>/dev/null || echo '(log yok)'",
-                on: server, timeout: 30)
+            let r = try await SSHRunner.shared.run(RelayScripts.log, on: server, timeout: 30)
             if !r.combined.isEmpty { logs = r.combined }
         } catch {
-            AILog.shared.add(kind: .error, relay: server.name, title: "Log çekilemedi",
+            AILog.shared.add(kind: .error, relay: server.name, title: "Could not fetch logs",
                              detail: error.localizedDescription, ok: false)
         }
 
@@ -131,14 +134,14 @@ struct RelayDetailView: View {
             let s = try await AIFixer.analyze(server: server, errorMessage: errMsg, logs: logs,
                                               commands: ai.commands, provider: ai.aiProvider,
                                               key: ai.activeKey, workspaceId: ai.claudeWorkspaceId)
-            let cmdName = ai.commands.first(where: { $0.id == s.commandId })?.name ?? "(komut önerilmedi)"
-            AILog.shared.add(kind: .analyze, relay: server.name, title: "Teşhis: \(cmdName)",
-                             detail: "Hata: \(errMsg)\n\nGerekçe: \(s.reason)", ok: true)
+            let cmdName = ai.commands.first(where: { $0.id == s.commandId })?.name ?? "(no command suggested)"
+            AILog.shared.add(kind: .analyze, relay: server.name, title: "Diagnosis: \(cmdName)",
+                             detail: "Error: \(errMsg)\n\nReasoning: \(s.reason)", ok: true)
             suggestion = s
         } catch {
-            AILog.shared.add(kind: .error, relay: server.name, title: "AI teşhisi başarısız",
+            AILog.shared.add(kind: .error, relay: server.name, title: "AI diagnosis failed",
                              detail: error.localizedDescription, ok: false)
-            output = ToolOutput(title: "AI teşhisi", text: error.localizedDescription, failed: true)
+            output = ToolOutput(title: "AI diagnosis", text: error.localizedDescription, failed: true)
         }
     }
 
@@ -146,9 +149,9 @@ struct RelayDetailView: View {
         do {
             let r = try await SSHRunner.shared.run(cmd.command, on: server, timeout: 60)
             let ok = (r.exitStatus ?? 0) == 0
-            AILog.shared.add(kind: .command, relay: server.name, title: cmd.name,
-                             detail: r.combined.isEmpty ? "(çıktı yok)" : r.combined, ok: ok)
-            output = ToolOutput(title: cmd.name, text: r.combined.isEmpty ? "(çıktı yok)" : r.combined, failed: !ok)
+            let text = r.combined.isEmpty ? "(no output)" : r.combined
+            AILog.shared.add(kind: .command, relay: server.name, title: cmd.name, detail: text, ok: ok)
+            output = ToolOutput(title: cmd.name, text: text, failed: !ok)
         } catch {
             AILog.shared.add(kind: .error, relay: server.name, title: cmd.name,
                              detail: error.localizedDescription, ok: false)
@@ -199,7 +202,7 @@ struct RelayDetailView: View {
     }
 
     private func mbps(_ v: Double?) -> String {
-        guard let v else { return "—" }
+        guard let v else { return pending }
         return String(format: v < 10 ? "%.2f Mbps" : "%.0f Mbps", v)
     }
 }

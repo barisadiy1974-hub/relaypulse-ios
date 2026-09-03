@@ -1,19 +1,18 @@
 import Foundation
 import SwiftUI
 
-/// Bir auto-fix komutu — Mac config.js autoFixCommands ile aynı şekil.
+/// One auto-fix command — same shape as Mac config.js autoFixCommands.
 struct FixCommand: Codable, Identifiable, Hashable {
     var id: Int
     var name: String
     var command: String
 }
 
-/// AI / auto-fix ayarları. Anahtarlar Keychain'de, gerisi UserDefaults'ta.
+/// AI / auto-fix settings. Keys live in Keychain; everything else in UserDefaults.
 @MainActor
 final class AppSettings: ObservableObject {
-    // NOT: @AppStorage burada KULLANILMAZ. O bir View property wrapper'i;
-    // ObservableObject icinde objectWillChange tetiklemiyor -> saglayici
-    // degistiginde ekran yenilenmiyor, "anahtar var mi" kontrolu bayat kaliyordu.
+    // NOTE: @AppStorage is NOT used here. It is a View property wrapper and does not
+    // fire objectWillChange inside ObservableObject, so the provider check was stale.
     @Published var aiProvider: String = UserDefaults.standard.string(forKey: "aiProvider") ?? "openai" {
         didSet { UserDefaults.standard.set(aiProvider, forKey: "aiProvider") }
     }
@@ -27,8 +26,8 @@ final class AppSettings: ObservableObject {
     @Published var claudeKey: String = Keychain.get("claudeApiKey") {
         didSet { Keychain.set(claudeKey, for: "claudeApiKey") }
     }
-    /// Workspace'e bagli (identity-linked) Anthropic anahtarlari `anthropic-workspace-id`
-    /// basligi olmadan 400 doner. Sir degil, bir kimlik — UserDefaults yeterli.
+    /// Identity-linked Anthropic keys return 400 without `anthropic-workspace-id`.
+    /// Not a secret — just an identifier — so UserDefaults is fine.
     @Published var claudeWorkspaceId: String = UserDefaults.standard.string(forKey: "claudeWorkspaceId") ?? "" {
         didSet { UserDefaults.standard.set(claudeWorkspaceId, forKey: "claudeWorkspaceId") }
     }
@@ -42,8 +41,8 @@ final class AppSettings: ObservableObject {
     var providerLabel: String { aiProvider == "claude" ? "Claude" : "OpenAI" }
     var modelLabel: String { aiProvider == "claude" ? "claude-haiku-4-5" : "gpt-4o-mini" }
 
-    /// Anahtar oneki secili saglayiciya uymuyorsa hangi saglayiciya ait oldugunu doner.
-    /// Anthropic anahtarlari "sk-ant-", OpenAI'inkiler "sk-" ile baslar.
+    /// Returns the other provider's name if the active key prefix doesn't match the selected provider.
+    /// Anthropic keys start with "sk-ant-", OpenAI keys with "sk-".
     var keyBelongsToOtherProvider: String? {
         let k = activeKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !k.isEmpty else { return nil }
@@ -52,7 +51,7 @@ final class AppSettings: ObservableObject {
         return nil
     }
 
-    // MARK: - Komut listesi kalıcılığı
+    // MARK: - Command persistence
 
     private static let cmdKey = "autoFixCommands"
 
@@ -73,9 +72,9 @@ final class AppSettings: ObservableObject {
 
     func resetCommands() { commands = AppSettings.defaultCommands }
 
-    /// İlk açılışta `Documents/ai_key.json` varsa AI anahtarını içeri alır ve dosyayı siler.
-    /// Mac'ten `devicectl device copy to` ile tohumlamak için — anahtarı elle yazmaya gerek kalmaz.
-    /// Beklenen biçim: {"provider":"claude","key":"sk-ant-…","workspaceId":""}
+    /// At first launch, reads `Documents/ai_key.json`, stores the key in Keychain, and deletes the file.
+    /// Used to seed the key from Mac via `devicectl device copy to` — no manual entry needed.
+    /// Expected format: {"provider":"claude","key":"sk-ant-…","workspaceId":""}
     func importSeedKeyIfPresent() {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let f = dir.appendingPathComponent("ai_key.json")
@@ -88,24 +87,24 @@ final class AppSettings: ObservableObject {
         claudeWorkspaceId = (o["workspaceId"] as? String) ?? ""
         aiProvider = provider
         try? FileManager.default.removeItem(at: f)
-        NSLog("AppSettings: AI anahtari tohum dosyasindan alindi (saglayici=\(provider))")
+        NSLog("AppSettings: AI key seeded from file (provider=\(provider))")
     }
 
-    /// Mac src/config.js DEFAULTS.autoFixCommands ile birebir.
+    /// Mirrors Mac src/config.js DEFAULTS.autoFixCommands.
     static let defaultCommands: [FixCommand] = [
-        .init(id: 1, name: "Relay servisini yeniden başlat",
+        .init(id: 1, name: "Restart relay service",
               command: "for svc in anon anon@default anyone anyone-relay tor-anon; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restarted: $svc\" && break; done"),
-        .init(id: 2, name: "Servis durumu",
+        .init(id: 2, name: "Service status",
               command: "for svc in anon anon@default anyone anyone-relay tor-anon; do s=$(systemctl is-active \"$svc\" 2>/dev/null); [ -n \"$s\" ] && echo \"$svc=$s\"; done"),
-        .init(id: 3, name: "Son 50 log satırı",
+        .init(id: 3, name: "Last 50 log lines",
               command: "journalctl -u anon -n 50 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 50 --no-pager 2>/dev/null || echo \"(log not found)\""),
-        .init(id: 5, name: "SSH servisini yeniden başlat",
+        .init(id: 5, name: "Restart SSH service",
               command: "systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; echo \"ssh=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null)\""),
-        .init(id: 12, name: "Disk kullanımı",
+        .init(id: 12, name: "Disk usage",
               command: "df -h / /var /tmp 2>/dev/null"),
-        .init(id: 13, name: "RAM ve yük",
+        .init(id: 13, name: "RAM and load",
               command: "free -m 2>/dev/null || vm_stat; uptime"),
-        .init(id: 16, name: "Reboot gerekli mi?",
+        .init(id: 16, name: "Reboot required?",
               command: "[ -f /var/run/reboot-required ] && cat /var/run/reboot-required || echo \"no reboot needed\""),
     ]
 }

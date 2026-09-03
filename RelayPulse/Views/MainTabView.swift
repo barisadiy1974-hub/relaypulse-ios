@@ -1,25 +1,25 @@
 import SwiftUI
 
-/// Mac RelayPulse sekmeleri: Röleler · Genel Bakış · Cüzdanlar · Araçlar · Ayarlar.
+/// Top-level tabs: Relays · Fleet Health · Wallets · Tools · Settings.
 struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView()
-                .tabItem { Label("Röleler", systemImage: "antenna.radiowaves.left.and.right") }
+                .tabItem { Label("Relays", systemImage: "antenna.radiowaves.left.and.right") }
 
             FleetHealthView()
-                .tabItem { Label("Filo Sağlığı", systemImage: "waveform.path.ecg") }
+                .tabItem { Label("Fleet Health", systemImage: "waveform.path.ecg") }
 
             NavigationStack {
-                WebDashboardView(title: "Cüzdanlar", url: URL(string: "https://dashboard.anyone.io")!)
+                WebDashboardView(title: "Wallets", url: URL(string: "https://dashboard.anyone.io")!)
             }
-            .tabItem { Label("Cüzdanlar", systemImage: "wallet.bifold") }
+            .tabItem { Label("Wallets", systemImage: "wallet.bifold") }
 
             NavigationStack { ToolsView() }
-                .tabItem { Label("Araçlar", systemImage: "wrench.and.screwdriver") }
+                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
 
             NavigationStack { SettingsView() }
-                .tabItem { Label("Ayarlar", systemImage: "gearshape") }
+                .tabItem { Label("Settings", systemImage: "gearshape") }
         }
     }
 }

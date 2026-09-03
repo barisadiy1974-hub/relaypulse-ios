@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// İlk açılış — hiç relay yokken. Elle ekle veya Mac RelayPulse JSON'unu içe aktar.
+/// First launch, no relays yet. Add one by hand or import a fleet JSON.
 struct ImportView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
@@ -21,7 +21,7 @@ struct ImportView: View {
                 Text("RelayPulse")
                     .font(.largeTitle.bold())
                     .foregroundStyle(Theme.text(scheme))
-                Text("Anyone relay filonu izle. Başlamak için relay ekle.")
+                Text("Monitor your Anyone relay fleet. Add a relay to get started.")
                     .font(.callout)
                     .foregroundStyle(Theme.muted(scheme))
                     .multilineTextAlignment(.center)
@@ -31,7 +31,7 @@ struct ImportView: View {
                     Button {
                         showAdd = true
                     } label: {
-                        Label("Relay ekle", systemImage: "plus")
+                        Label("Add relay", systemImage: "plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -39,12 +39,12 @@ struct ImportView: View {
                     Button {
                         showPicker = true
                     } label: {
-                        Label("Mac RelayPulse JSON'unu içe aktar", systemImage: "square.and.arrow.down")
+                        Label("Import fleet JSON", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
-                    Button("JSON metnini yapıştır") { showPaste = true }
+                    Button("Paste JSON") { showPaste = true }
                         .font(.footnote)
                 }
                 .padding(.horizontal, 36)
@@ -83,7 +83,7 @@ struct ImportView: View {
 
     private func apply(_ data: Data) {
         do { try fleet.importConfig(from: data); error = nil }
-        catch { self.error = "Aktarım başarısız: \(error.localizedDescription)" }
+        catch { self.error = "Import failed: \(error.localizedDescription)" }
     }
 }
 
@@ -99,12 +99,12 @@ private struct PasteSheet: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .padding(8)
-                .navigationTitle("JSON yapıştır")
+                .navigationTitle("Paste JSON")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Aktar") { onSubmit(text); dismiss() }
+                        Button("Import") { onSubmit(text); dismiss() }
                             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }

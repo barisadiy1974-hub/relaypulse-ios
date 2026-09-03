@@ -10,16 +10,16 @@ enum OpenSSHKeyError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badPEM: return "Anahtar dosyası OpenSSH formatında değil"
-        case .unsupportedCipher(let c): return "Şifreli anahtar desteklenmiyor (\(c)) — parolasız ed25519 anahtar kullan"
-        case .unsupportedType(let t): return "Desteklenmeyen anahtar tipi: \(t) (sadece ed25519)"
-        case .corrupt(let m): return "Anahtar okunamadı: \(m)"
+        case .badPEM: return "The key file is not in OpenSSH format"
+        case .unsupportedCipher(let c): return "Encrypted keys are not supported (\(c)) — use an unencrypted ed25519 key"
+        case .unsupportedType(let t): return "Unsupported key type: \(t) (ed25519 only)"
+        case .corrupt(let m): return "Could not read the key: \(m)"
         }
     }
 }
 
-/// OpenSSH ("-----BEGIN OPENSSH PRIVATE KEY-----") formatındaki **parolasız
-/// ed25519** özel anahtarını çözer. NIOSSH bu formatı kendi başına okumuyor.
+/// Parses an **unencrypted ed25519** private key in OpenSSH format
+/// ("-----BEGIN OPENSSH PRIVATE KEY-----"). NIOSSH does not read this format itself.
 enum OpenSSHKey {
     static func ed25519(fromPEM pem: String) throws -> NIOSSHPrivateKey {
         NIOSSHPrivateKey(ed25519Key: try curve25519(fromPEM: pem))
@@ -46,23 +46,23 @@ enum OpenSSHKey {
         }
 
         let nkeys = try r.uint32()
-        guard nkeys == 1 else { throw OpenSSHKeyError.corrupt("beklenmeyen anahtar sayısı: \(nkeys)") }
+        guard nkeys == 1 else { throw OpenSSHKeyError.corrupt("unexpected key count: \(nkeys)") }
         _ = try r.bytes()                        // public key blob
 
         var priv = Reader(try r.bytes())
         let c1 = try priv.uint32(), c2 = try priv.uint32()
-        guard c1 == c2 else { throw OpenSSHKeyError.corrupt("checkint uyuşmuyor (anahtar parolalı olabilir)") }
+        guard c1 == c2 else { throw OpenSSHKeyError.corrupt("checkint mismatch (the key may be passphrase-protected)") }
 
         let type = try priv.string()
         guard type == "ssh-ed25519" else { throw OpenSSHKeyError.unsupportedType(type) }
         _ = try priv.bytes()                     // public (32)
         let secret = try priv.bytes()            // seed(32) || public(32)
-        guard secret.count == 64 else { throw OpenSSHKeyError.corrupt("ed25519 gizli anahtar 64 bayt değil") }
+        guard secret.count == 64 else { throw OpenSSHKeyError.corrupt("ed25519 secret is not 64 bytes") }
 
         return try Curve25519.Signing.PrivateKey(rawRepresentation: secret.prefix(32))
     }
 
-    // MARK: - Big-endian okuyucu
+    // MARK: - Big-endian reader
 
     private struct Reader {
         private let d: Data
@@ -70,7 +70,7 @@ enum OpenSSHKey {
         init(_ data: Data) { d = data; i = data.startIndex }
 
         mutating func take(_ n: Int) throws -> Data {
-            guard n >= 0, i + n <= d.endIndex else { throw OpenSSHKeyError.corrupt("beklenmedik dosya sonu") }
+            guard n >= 0, i + n <= d.endIndex else { throw OpenSSHKeyError.corrupt("unexpected end of file") }
             defer { i += n }
             return d[i..<(i + n)]
         }

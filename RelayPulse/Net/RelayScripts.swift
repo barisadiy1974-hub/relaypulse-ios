@@ -1,17 +1,17 @@
 import Foundation
 
-/// Relay üzerinde çalıştırılan kabuk/python betikleri.
-/// Swift ham dize (`#"""`) kullanılır — ters bölü ve tırnaklar aynen gider.
+/// Shell / Python snippets executed on the relay over SSH.
+/// Swift raw strings (`#"""`) so backslashes and quotes pass through untouched.
 enum RelayScripts {
 
-    /// nyx eşdeğeri. nyx'in yaptığı gibi anon **kontrol soketine** bağlanıp
-    /// (cookie auth) gerçek relay verisini çeker: sürüm, uptime, toplam trafik,
-    /// consensus bayrakları, ağırlık, OR bağlantı sayısı.
+    /// Nyx equivalent. Like nyx, it talks to anon's **control socket** (cookie
+    /// auth) for the real relay data: version, uptime, total traffic, consensus
+    /// flags, weight, OR connection count.
     ///
-    /// Neden gerekliydi: `systemctl status anon` çok-örnekli kutularda
-    /// "multi-instance-master" unit'ini gösteriyordu (`active (exited)`),
-    /// `grep ... /etc/anon/anonrc*` ise yedek dosyaları da tarayıp aynı satırı
-    /// defalarca yazdırıyordu.
+    /// Why this is needed: `systemctl status anon` shows the
+    /// "multi-instance-master" unit on multi-instance boxes (`active (exited)`),
+    /// hiding the real `anon@…` instance, and `grep /etc/anon/anonrc*` also
+    /// matches backup files, printing the same line several times.
     static let nyx = #"""
     python3 - <<'PYEOF'
     import socket, os, glob, subprocess
@@ -32,7 +32,7 @@ enum RelayScripts {
         try: s = int(s)
         except Exception: return "?"
         d, s = divmod(s, 86400); h, s = divmod(s, 3600); m, _ = divmod(s, 60)
-        return ("%dg " % d if d else "") + "%dsa %ddk" % (h, m)
+        return ("%dd " % d if d else "") + "%dh %dm" % (h, m)
 
     class Ctl:
         def __init__(self, path, cookie):
@@ -67,23 +67,23 @@ enum RelayScripts {
             except Exception: pass
 
     units = [u.split()[0] for u in sh("systemctl list-units --type=service --state=running --no-pager --plain 'anon*'").splitlines() if u.startswith("anon")]
-    print("=== ÇALIŞAN RELAY SERVİSLERİ ===")
-    for u in units or ["(çalışan anon servisi yok)"]:
+    print("=== RUNNING RELAY SERVICES ===")
+    for u in units or ["(no anon service running)"]:
         if not u.startswith("anon"): print(u); continue
         pid = sh("systemctl show %s -p MainPID --value" % u)
         rss = sh("ps -o rss= -p %s" % pid) if pid and pid != "0" else ""
         cpu = sh("ps -o %%cpu= -p %s" % pid) if pid and pid != "0" else ""
         extra = (" · RAM " + human(int(rss) * 1024)) if rss.isdigit() else ""
         extra += (" · CPU " + cpu.strip() + "%") if cpu.strip() else ""
-        print(u + "  aktif" + extra)
+        print(u + "  active" + extra)
         since = sh("systemctl show %s -p ActiveEnterTimestamp --value" % u)
-        if since: print("  başlangıç: " + since)
+        if since: print("  started: " + since)
 
     sock = next((p for p in ["/run/anon/control", "/var/run/anon/control", "/run/tor/control"] if os.path.exists(p)), None)
     cookie_path = next(iter(glob.glob("/run/anon/*.authcookie") + glob.glob("/var/lib/anon/control_auth_cookie") + glob.glob("/run/tor/*.authcookie")), None)
 
     if not sock or not cookie_path:
-        print("\n(kontrol soketi/cookie bulunamadı — sadece servis bilgisi)")
+        print("\n(no control socket / cookie found — service info only)")
     else:
         try:
             c = Ctl(sock, open(cookie_path, "rb").read().hex())
@@ -91,28 +91,28 @@ enum RelayScripts {
             fp = fpraw.split()[-1] if fpraw else None
             nick = c.info("conf/Nickname") or sh("grep -m1 '^Nickname' /etc/anon/anonrc | awk '{print $2}'")
             print("\n=== RELAY ===")
-            print("Nickname     : " + (nick or "?"))
-            print("Fingerprint  : " + (fp or "?"))
-            print("Sürüm        : " + (c.info("version") or "?"))
+            print("Nickname   : " + (nick or "?"))
+            print("Fingerprint: " + (fp or "?"))
+            print("Version    : " + (c.info("version") or "?"))
             up = c.info("uptime")
-            if up: print("Uptime       : " + dur(up))
+            if up: print("Uptime     : " + dur(up))
             di = c.info("status/enough-dir-info")
-            print("Dizin bilgisi: " + ("tam" if di == "1" else "eksik / indiriliyor"))
+            print("Directory  : " + ("complete" if di == "1" else "incomplete / downloading"))
 
-            print("\n=== TRAFİK (servis başından beri) ===")
-            print("İndirilen: " + human(c.info("traffic/read")) + "   Yüklenen: " + human(c.info("traffic/written")))
+            print("\n=== TRAFFIC (since service start) ===")
+            print("Read: " + human(c.info("traffic/read")) + "   Written: " + human(c.info("traffic/written")))
 
             if fp:
                 ns = c.info("ns/id/$" + fp)
                 if ns:
                     for line in ns.splitlines():
                         if line.startswith("s "):
-                            print("\n=== CONSENSUS BAYRAKLARI ===")
+                            print("\n=== CONSENSUS FLAGS ===")
                             print("  " + ", ".join(line[2:].split()))
                         if line.startswith("w "):
-                            print("Ağırlık: " + line[2:])
+                            print("Weight: " + line[2:])
                 else:
-                    print("\n(consensus'ta bulunamadı — henüz yayılmamış olabilir)")
+                    print("\n(not in the consensus yet — may still be propagating)")
 
             oc = c.info("orconn-status")
             if oc:
@@ -121,42 +121,50 @@ enum RelayScripts {
                 for l in lines:
                     st = l.split()[-1] if l.split() else "?"
                     states[st] = states.get(st, 0) + 1
-                print("\n=== OR BAĞLANTILARI ===")
-                print("Toplam %d · " % len(lines) + ", ".join("%s: %d" % (k, v) for k, v in states.items()))
+                print("\n=== OR CONNECTIONS ===")
+                print("Total %d · " % len(lines) + ", ".join("%s: %d" % (k, v) for k, v in states.items()))
             c.close()
         except Exception as e:
-            print("\n(kontrol portu hatası: %s)" % e)
+            print("\n(control port error: %s)" % e)
 
-    print("\n=== PORTLAR ===")
-    print(sh("ss -tnlp 2>/dev/null | grep -E ':(9001|9030|9050|9051|443)\\b'") or "(dinleyen relay portu yok)")
-    print("Kurulu bağlantı: " + (sh("ss -tn state established 2>/dev/null | tail -n +2 | wc -l") or "?"))
+    print("\n=== PORTS ===")
+    print(sh("ss -tnlp 2>/dev/null | grep -E ':(9001|9030|9050|9051|443)\\b'") or "(no relay port listening)")
+    print("Established connections: " + (sh("ss -tn state established 2>/dev/null | tail -n +2 | wc -l") or "?"))
 
-    print("\n=== YAPILANDIRMA (/etc/anon/anonrc) ===")
-    print(sh("grep -E '^(Nickname|Address|ContactInfo|ORPort|DirPort|BandwidthRate|BandwidthBurst|RelayBandwidthRate|AccountingMax|ExitRelay)' /etc/anon/anonrc") or "(okunamadı)")
+    print("\n=== CONFIG (/etc/anon/anonrc) ===")
+    print(sh("grep -E '^(Nickname|Address|ContactInfo|ORPort|DirPort|BandwidthRate|BandwidthBurst|RelayBandwidthRate|AccountingMax|ExitRelay)' /etc/anon/anonrc") or "(unreadable)")
     ex = sh("grep -c '^ExitPolicy' /etc/anon/anonrc")
-    if ex.isdigit() and int(ex) > 0: print("ExitPolicy   : %s satır" % ex)
+    if ex.isdigit() and int(ex) > 0: print("ExitPolicy : %s lines" % ex)
     if sh("grep -c '^MyFamily' /etc/anon/anonrc") == "1":
-        print("MyFamily     : %s üye" % sh("grep '^MyFamily' /etc/anon/anonrc | tr ',' '\\n' | wc -l"))
+        print("MyFamily   : %s members" % sh("grep '^MyFamily' /etc/anon/anonrc | tr ',' '\\n' | wc -l"))
     PYEOF
     """#
 
-    /// htop eşdeğeri — tek seferlik süreç/bellek/disk özeti.
+    /// htop equivalent — one-shot process / memory / disk summary.
     static let htop = #"""
-    echo "=== YÜK ==="; uptime
-    echo; echo "=== EN ÇOK CPU ==="; ps -eo pid,pcpu,pmem,rss,comm --sort=-pcpu 2>/dev/null | head -8
-    echo; echo "=== EN ÇOK BELLEK ==="; ps -eo pid,pcpu,pmem,rss,comm --sort=-rss 2>/dev/null | head -6
-    echo; echo "=== BELLEK ==="; free -m 2>/dev/null
-    echo; echo "=== DİSK ==="; df -h / /var 2>/dev/null
+    echo "=== LOAD ==="; uptime
+    echo; echo "=== TOP CPU ==="; ps -eo pid,pcpu,pmem,rss,comm --sort=-pcpu 2>/dev/null | head -8
+    echo; echo "=== TOP MEMORY ==="; ps -eo pid,pcpu,pmem,rss,comm --sort=-rss 2>/dev/null | head -6
+    echo; echo "=== MEMORY ==="; free -m 2>/dev/null
+    echo; echo "=== DISK ==="; df -h / /var 2>/dev/null
     """#
 
-    static let log = "journalctl -u anon -n 60 --no-pager 2>/dev/null || journalctl -u 'anon@*' -n 60 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 60 --no-pager 2>/dev/null || echo '(log bulunamadı)'"
+    static let log = "journalctl -u anon -n 60 --no-pager 2>/dev/null || journalctl -u 'anon@*' -n 60 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 60 --no-pager 2>/dev/null || echo '(no log found)'"
 
     static let https = #"""
     echo "=== AGENT (:19191) ==="
-    curl -sk -m 8 -o /dev/null -w 'HTTP %{http_code} · %{time_total}s\n' https://127.0.0.1:19191/metrics 2>&1 || echo "curl basarisiz"
-    echo "=== AGENT SERVİSİ ==="
-    systemctl is-active anyone-agent 2>/dev/null || systemctl is-active relaypulse-agent 2>/dev/null || systemctl list-units --type=service --plain --no-pager '*agent*' 2>/dev/null | head -4 || echo "(agent servisi bulunamadı)"
-    echo "=== DİNLEYEN ==="
-    ss -tnlp 2>/dev/null | grep 19191 || echo "(19191 dinlenmiyor)"
+    curl -sk -m 8 -o /dev/null -w 'HTTP %{http_code} · %{time_total}s\n' https://127.0.0.1:19191/metrics 2>&1 || echo "curl failed"
+    echo "=== AGENT SERVICE ==="
+    systemctl is-active anyone-agent 2>/dev/null || systemctl is-active relaypulse-agent 2>/dev/null || systemctl list-units --type=service --plain --no-pager '*agent*' 2>/dev/null | head -4 || echo "(no agent service found)"
+    echo "=== LISTENING ==="
+    ss -tnlp 2>/dev/null | grep 19191 || echo "(nothing listening on 19191)"
+    """#
+
+    /// Locates the live anonrc and prints `PATH=<path>` then `---` then the contents.
+    static let readAnonrc = #"""
+    for p in /etc/anon/anonrc /etc/anon/anonrc-* /etc/anon/instances/*/anonrc /usr/local/etc/anon/anonrc /etc/tor/torrc; do
+      [ -f "$p" ] && { echo "PATH=$p"; echo '---'; cat "$p"; exit 0; }
+    done
+    echo "PATH="; echo '---'; echo "(anonrc not found)"
     """#
 }

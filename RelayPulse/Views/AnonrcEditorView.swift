@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// anonrc oku / düzenle / yaz — Mac'teki anonrc düzenleyicinin karşılığı.
-/// Yazmadan önce relay'de zaman damgalı yedek alınır.
+/// Read / edit / write anonrc, the equivalent of the desktop config editor.
+/// A timestamped backup is taken on the relay before anything is written.
 struct AnonrcEditorView: View {
     @Environment(\.colorScheme) private var scheme
     let server: Server
@@ -20,7 +20,7 @@ struct AnonrcEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             if loading {
-                ProgressView("anonrc okunuyor…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView("Reading anonrc…").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 TextEditor(text: $text)
                     .font(.system(size: 12, design: .monospaced))
@@ -43,16 +43,16 @@ struct AnonrcEditorView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if saving { ProgressView() }
-                else { Button("Kaydet") { showSaveConfirm = true }.disabled(!dirty) }
+                else { Button("Save") { showSaveConfirm = true }.disabled(!dirty) }
             }
         }
-        .confirmationDialog("anonrc yazılıp anon servisi yeniden başlatılsın mı?",
+        .confirmationDialog("Write anonrc and restart the anon service?",
                             isPresented: $showSaveConfirm, titleVisibility: .visible) {
-            Button("Yaz ve yeniden başlat", role: .destructive) { Task { await save(restart: true) } }
-            Button("Sadece yaz") { Task { await save(restart: false) } }
-            Button("Vazgeç", role: .cancel) {}
+            Button("Write and restart", role: .destructive) { Task { await save(restart: true) } }
+            Button("Write only") { Task { await save(restart: false) } }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("\(server.name) üzerinde \(path). Önce zaman damgalı yedek alınır.")
+            Text("\(path) on \(server.name). A timestamped backup is taken first.")
         }
         .task { await load() }
     }
@@ -60,19 +60,13 @@ struct AnonrcEditorView: View {
     private func load() async {
         loading = true
         defer { loading = false }
-        let cmd = """
-        for p in /etc/anon/anonrc /etc/anon/anonrc-* /etc/anon/instances/*/anonrc /usr/local/etc/anon/anonrc /etc/tor/torrc; do
-          [ -f "$p" ] && { echo "PATH=$p"; echo '---'; cat "$p"; exit 0; }
-        done
-        echo "PATH="; echo '---'; echo "(anonrc bulunamadi)"
-        """
         do {
-            let r = try await SSHRunner.shared.run(cmd, on: server, timeout: 25)
+            let r = try await SSHRunner.shared.run(RelayScripts.readAnonrc, on: server, timeout: 25)
             let parts = r.stdout.components(separatedBy: "\n---\n")
             path = parts.first?.replacingOccurrences(of: "PATH=", with: "").trimmingCharacters(in: .whitespaces) ?? ""
             text = parts.count > 1 ? parts[1] : r.combined
             original = text
-            if path.isEmpty { status = "anonrc bulunamadı"; failed = true }
+            if path.isEmpty { status = "anonrc not found"; failed = true }
         } catch {
             text = ""; status = error.localizedDescription; failed = true
         }
@@ -82,17 +76,17 @@ struct AnonrcEditorView: View {
         guard !path.isEmpty else { return }
         saving = true
         defer { saving = false }
-        // Heredoc ile yaz — içerik kabuk tarafından yorumlanmasın diye tırnaklı sınırlayıcı.
+        // Quoted heredoc delimiter so the shell never expands the file contents.
         let marker = "RPEOF_\(UInt32.random(in: 100000...999999))"
         var cmd = """
         cp \(path) \(path).bak-$(date +%Y%m%d-%H%M%S) 2>/dev/null
         cat > \(path) <<'\(marker)'
         \(text)
         \(marker)
-        echo "yazildi: $(wc -l < \(path)) satir"
+        echo "wrote $(wc -l < \(path)) lines"
         """
         if restart {
-            cmd += "\nfor svc in anon anon@default anyone anyone-relay; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restart: $svc\" && break; done"
+            cmd += "\nfor svc in anon anon@default anyone anyone-relay; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restarted: $svc\" && break; done"
         }
         do {
             let r = try await SSHRunner.shared.run(cmd, on: server, timeout: 40)

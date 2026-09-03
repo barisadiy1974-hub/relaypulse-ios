@@ -1,7 +1,7 @@
 import Foundation
 
-/// Aktarilan filo tanimini cihazda saklar.
-/// Documents/fleet.json — cihaz kilitliyken sifreli (FileProtectionType.complete).
+/// Persists the imported fleet definition on-device.
+/// Documents/fleet.json — encrypted at rest when the device is locked (FileProtectionType.complete).
 enum ServerStorage {
     private static var url: URL {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

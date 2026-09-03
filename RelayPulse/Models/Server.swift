@@ -1,7 +1,7 @@
 import Foundation
 
-/// Mac RelayPulse'tan disari aktarilan tek bir relay tanimi.
-/// Kaynak: Mac app "iPhone'a Aktar" -> anyone-monitor.json + cozulmus agentToken.
+/// A single relay definition exported from Mac RelayPulse.
+/// Source: Mac app "Export to iPhone" → anyone-monitor.json + resolved agentToken.
 struct Server: Codable, Identifiable, Hashable {
     var name: String
     var host: String
@@ -9,7 +9,7 @@ struct Server: Codable, Identifiable, Hashable {
     var agentScheme: String
     var agentToken: String
     var wallet: String
-    /// SSH (araçlar için): kullanıcı ve port. Özel anahtar tek ve ortaktır — Keychain'de.
+    /// SSH (for tools): user and port. The private key is shared and stored in Keychain.
     var sshUser: String
     var sshPort: Int
 
@@ -54,7 +54,7 @@ struct Server: Codable, Identifiable, Hashable {
     }
 }
 
-/// Aktarim dosyasinin tamami (Mac export ciktisi).
+/// Full export file (Mac export output).
 struct FleetExport: Codable {
     var exportedAt: Double?
     var pollSec: Int?

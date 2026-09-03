@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Relay ekle / düzenle. Standalone kullanım: Mac RelayPulse olmadan da relay girilebilir.
+/// Add or edit a relay. Lets the app be used standalone, without desktop RelayPulse.
 struct ServerEditView: View {
     enum Mode: Equatable {
         case add
@@ -18,6 +18,8 @@ struct ServerEditView: View {
     @State private var scheme = "https"
     @State private var token = ""
     @State private var wallet = ""
+    @State private var sshUser = "root"
+    @State private var sshPort = "22"
     @State private var showTokenPlain = false
     @State private var error: String?
     @State private var showDelete = false
@@ -31,18 +33,18 @@ struct ServerEditView: View {
         NavigationStack {
             Form {
                 Section("Relay") {
-                    LabeledField("Ad", text: $name, placeholder: "Barisfreak1")
-                    LabeledField("Host / IP", text: $host, placeholder: "143.20.134.161")
+                    LabeledField("Name", text: $name, placeholder: "relay-01")
+                    LabeledField("Host / IP", text: $host, placeholder: "203.0.113.10")
                         .keyboardType(.URL)
                     HStack {
-                        Text("Port").foregroundStyle(.secondary)
+                        Text("Agent port").foregroundStyle(.secondary)
                         Spacer()
                         TextField("19191", text: $port)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 90)
                     }
-                    Picker("Şema", selection: $scheme) {
+                    Picker("Scheme", selection: $scheme) {
                         Text("HTTPS").tag("https")
                         Text("HTTP").tag("http")
                     }
@@ -64,11 +66,28 @@ struct ServerEditView: View {
                 } header: {
                     Text("Agent token")
                 } footer: {
-                    Text("Relay'deki agent servisinin AGENT_TOKEN değeri (/opt/anyone-agent). Boşsa agent token istemiyordur.")
+                    Text("The AGENT_TOKEN of the metrics agent running on the relay. Leave empty if the agent requires no token.")
                 }
 
-                Section("İsteğe bağlı") {
-                    LabeledField("Cüzdan", text: $wallet, placeholder: "0x…")
+                Section {
+                    LabeledField("SSH user", text: $sshUser, placeholder: "root")
+                        .autocorrectionDisabled().textInputAutocapitalization(.never)
+                    HStack {
+                        Text("SSH port").foregroundStyle(.secondary)
+                        Spacer()
+                        TextField("22", text: $sshPort)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                    }
+                } header: {
+                    Text("SSH")
+                } footer: {
+                    Text("Used by the tools (Nyx, htop, anonrc, fix commands). The private key is shared across relays — set it in Tools › SSH key.")
+                }
+
+                Section("Optional") {
+                    LabeledField("Wallet", text: $wallet, placeholder: "0x…")
                         .autocorrectionDisabled().textInputAutocapitalization(.never)
                 }
 
@@ -79,27 +98,27 @@ struct ServerEditView: View {
                 if case .edit = mode {
                     Section {
                         Button(role: .destructive) { showDelete = true } label: {
-                            Label("Bu relay'i sil", systemImage: "trash")
+                            Label("Delete this relay", systemImage: "trash")
                         }
                     }
                 }
             }
-            .navigationTitle(isEdit ? "Relay Düzenle" : "Relay Ekle")
+            .navigationTitle(isEdit ? "Edit relay" : "Add relay")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { save() }.disabled(!canSave)
+                    Button("Save") { save() }.disabled(!canSave)
                 }
             }
-            .confirmationDialog("\(name) silinsin mi?", isPresented: $showDelete, titleVisibility: .visible) {
-                Button("Sil", role: .destructive) {
+            .confirmationDialog("Delete \(name)?", isPresented: $showDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
                     if let n = originalName { fleet.removeServer(named: n) }
                     dismiss()
                 }
-                Button("Vazgeç", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             }
             .onAppear(perform: load)
         }
@@ -117,6 +136,7 @@ struct ServerEditView: View {
         name = s.name; host = s.host; port = "\(s.agentPort)"
         scheme = s.agentScheme.isEmpty ? "https" : s.agentScheme
         token = s.agentToken; wallet = s.wallet
+        sshUser = s.sshUser; sshPort = "\(s.sshPort)"
     }
 
     private func save() {
@@ -126,12 +146,14 @@ struct ServerEditView: View {
             agentPort: Int(port) ?? 19191,
             agentScheme: scheme,
             agentToken: token.trimmingCharacters(in: .whitespaces),
-            wallet: wallet.trimmingCharacters(in: .whitespaces)
+            wallet: wallet.trimmingCharacters(in: .whitespaces),
+            sshUser: sshUser.trimmingCharacters(in: .whitespaces).isEmpty ? "root" : sshUser.trimmingCharacters(in: .whitespaces),
+            sshPort: Int(sshPort) ?? 22
         )
         switch mode {
         case .add:
             guard fleet.addServer(s) else {
-                error = "Bu adda relay zaten var."
+                error = "A relay with that name already exists."
                 return
             }
         case .edit:

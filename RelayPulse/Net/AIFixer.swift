@@ -1,8 +1,8 @@
 import Foundation
 
-/// AI teşhis — Mac src/ai-fixer.js'in iPhone karşılığı.
-/// Relay'in hatasını + son loglarını modele gönderir, komut listesinden birini seçtirir.
-/// Komut BURADA çalıştırılmaz; çağıran taraf kullanıcıya sorup çalıştırır.
+/// AI diagnosis — iOS counterpart to Mac src/ai-fixer.js.
+/// Sends the relay's error and recent logs to the model, which picks a fix command.
+/// The command is NOT executed here; the caller shows it to the user first.
 enum AIFixer {
     struct Suggestion {
         var commandId: Int?
@@ -17,56 +17,56 @@ enum AIFixer {
 
         var errorDescription: String? {
             switch self {
-            case .noKey: return "API anahtarı girilmedi"
+            case .noKey: return "No API key configured"
             case .http(let c, let b): return "API \(c): \(b.prefix(200))"
-            case .badResponse(let m): return "Yanıt okunamadı: \(m)"
+            case .badResponse(let m): return "Could not read response: \(m)"
             }
         }
     }
 
-    // MARK: - Anahtar testi
+    // MARK: - Key test
 
-    /// Anahtarı en ucuz istekle doğrular. Başarılıysa modelin adını döner.
+    /// Validates the key with a minimal request. Returns the model name on success.
     static func testKey(provider: String, key: String, workspaceId: String = "") async throws -> String {
         guard !key.isEmpty else { throw AIError.noKey }
         let reply = try await call(provider: provider, key: key, workspaceId: workspaceId,
-                                   prompt: "Sadece OK yaz, baska hicbir sey yazma.",
+                                   prompt: "Reply with only the word OK, nothing else.",
                                    maxTokens: 8)
         let model = provider == "claude" ? "claude-haiku-4-5" : "gpt-4o-mini"
         return "\(model) → \(reply.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))"
     }
 
-    // MARK: - Teşhis
+    // MARK: - Diagnosis
 
     static func analyze(server: Server, errorMessage: String, logs: String,
                         commands: [FixCommand], provider: String, key: String,
                         workspaceId: String = "") async throws -> Suggestion {
         guard !key.isEmpty else { throw AIError.noKey }
-        let list = commands.map { "id=\($0.id) ad=\"\($0.name)\"" }.joined(separator: "\n")
+        let list = commands.map { "id=\($0.id) name=\"\($0.name)\"" }.joined(separator: "\n")
         let prompt = """
-        Sen bir Linux sunucu yonetim asistanisin. Anyone Network relay sunucularini izliyorsun.
-        Sadece JSON ile cevap ver, baska hicbir sey yazma.
+        You are a Linux server management assistant monitoring Anyone Network relay servers.
+        Reply ONLY with JSON, nothing else.
 
-        Sunucu: \(server.name) (\(server.host))
-        Hata bildirimi: \(errorMessage.prefix(500))
+        Server: \(server.name) (\(server.host))
+        Error report: \(errorMessage.prefix(500))
 
-        Son log satirlari (DIKKATLI OKU — asil nedeni buradan bul):
+        Recent log lines (read carefully — find the root cause here):
         \(logs.suffix(6000))
 
-        KARAR KURALLARI:
-        1. ONCE LOGLARI OKU — nedeni logdan tespit et, koru restart yapma.
-        2. Disk dolu ise disk komutunu sec.
-        3. "Address already in use" varsa sureci durdurup yeniden baslatan komutu sec.
-        4. Konfigurasyon hatasi varsa once log/durum kontrol komutunu sec.
-        5. Servis down ve logda spesifik hata yoksa restart komutunu sec.
-        - SADECE asagidaki listede GERCEKTEN VAR OLAN bir id sec; uydurma.
-        - Emin degilsen log komutunu sec.
+        DECISION RULES:
+        1. READ THE LOGS FIRST — identify the cause from logs, don't just restart blindly.
+        2. If disk is full, pick the disk command.
+        3. If "Address already in use", pick a command that stops the process and restarts.
+        4. If there is a config error, pick a log/status check command first.
+        5. If the service is down with no specific log error, pick the restart command.
+        - ONLY pick an id that ACTUALLY EXISTS in the list below; do not invent one.
+        - If unsure, pick the log command.
 
-        Kullanilabilir komutlar:
+        Available commands:
         \(list)
 
-        Yanit formati (SADECE JSON):
-        {"commandId": <sayi veya null>, "reason": "<asil neden ve neden bu komut, 1-2 cumle>"}
+        Response format (JSON ONLY):
+        {"commandId": <number or null>, "reason": "<root cause and why this command, 1-2 sentences>"}
         """
         let text = try await call(provider: provider, key: key, workspaceId: workspaceId,
                                   prompt: prompt, maxTokens: 500)
@@ -74,7 +74,7 @@ enum AIFixer {
     }
 
     private static func parse(_ text: String) -> Suggestion {
-        // Model bazen JSON'u ``` icine sarar ya da once aciklama yazar.
+        // Model sometimes wraps JSON in ``` or adds prose before it.
         guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
             return Suggestion(commandId: nil, reason: text.trimmingCharacters(in: .whitespacesAndNewlines), raw: text)
         }
@@ -88,7 +88,7 @@ enum AIFixer {
         return Suggestion(commandId: id, reason: reason, raw: text)
     }
 
-    // MARK: - Sağlayıcılar
+    // MARK: - Providers
 
     private static func call(provider: String, key: String, workspaceId: String,
                              prompt: String, maxTokens: Int) async throws -> String {
@@ -125,7 +125,7 @@ enum AIFixer {
         req.setValue(key, forHTTPHeaderField: "x-api-key")
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Workspace'e bagli anahtarlar bu baslik olmadan 400 doner.
+        // Identity-linked keys return 400 without this header.
         let ws = workspaceId.trimmingCharacters(in: .whitespacesAndNewlines)
         if !ws.isEmpty { req.setValue(ws, forHTTPHeaderField: "anthropic-workspace-id") }
         req.timeoutInterval = 45

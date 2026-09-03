@@ -1,8 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// AI / araç etkinlik kaydı — Mac'teki AI log listesinin karşılığı.
-/// Ne denendi, ne sonuç verdi, hata neydi; hepsi burada görünür.
+/// Activity log for AI / tool runs — mirrors the AI log panel on the Mac.
 struct AILogEntry: Codable, Identifiable {
     enum Kind: String, Codable { case analyze, command, test, error }
 

@@ -2,11 +2,11 @@ import Foundation
 import SwiftUI
 
 enum RelayState: String {
-    case online          // agent OK + anon saglikli
-    case warn            // agent OK ama anon inactive / dashboard down
-    case stale           // 1 basarisiz poll (gecici)
-    case offline         // OFFLINE_AFTER+ ardisik basarisiz
-    case unknown         // henuz hic pollanmadi
+    case online          // agent OK + anon healthy
+    case warn            // agent OK but anon inactive / dashboard down
+    case stale           // 1 failed poll (transient)
+    case offline         // OFFLINE_AFTER+ consecutive failures
+    case unknown         // never polled yet
 
     func color(_ s: ColorScheme) -> Color {
         switch self {
@@ -20,16 +20,16 @@ enum RelayState: String {
 
     var label: String {
         switch self {
-        case .online:  return "Çevrimiçi"
-        case .warn:    return "Uyarı"
-        case .stale:   return "Sarkıyor"
-        case .offline: return "Çevrimdışı"
-        case .unknown: return "Bekleniyor"
+        case .online:  return "Online"
+        case .warn:    return "Warning"
+        case .stale:   return "Stale"
+        case .offline: return "Offline"
+        case .unknown: return "Pending"
         }
     }
 }
 
-/// Bir relay'in izlemedeki anlik durumu — kart cizimi bunu kullanir.
+/// A relay's current monitored state — what the card renders.
 struct RelayStatus: Identifiable {
     let name: String
     var state: RelayState = .unknown
@@ -37,7 +37,7 @@ struct RelayStatus: Identifiable {
     var lastError: String?
     var lastUpdated: Date?
 
-    // Son basarili olcumden turetilen degerler (stale sirasinda da gorunur kalir).
+    // Derived from the last successful poll; stays visible while stale.
     var anonLabel: String = "—"
     var anonHealthy: Bool = false
     var conn: Int?
@@ -54,10 +54,10 @@ struct RelayStatus: Identifiable {
     var id: String { name }
 
     var ageText: String {
-        guard let t = lastUpdated else { return "hic" }
+        guard let t = lastUpdated else { return "never" }
         let s = Int(Date().timeIntervalSince(t))
-        if s < 60 { return "\(s)sn" }
-        if s < 3600 { return "\(s / 60)dk" }
-        return "\(s / 3600)sa"
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        return "\(s / 3600)h"
     }
 }

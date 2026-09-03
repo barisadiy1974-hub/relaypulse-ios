@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Mac'teki Araçlar sekmelerinin (Nyx / htop / Log / HTTPS) karşılığı:
-/// sunucu seçicisi + çalıştır + çıktı. Her araç kendi komutunu taşır.
+/// One tool (Nyx / htop / log / HTTPS) with a server picker, a run button and
+/// its output — the phone equivalent of the desktop Tools tabs.
 struct ToolRunnerView: View {
     enum Kind: String, CaseIterable, Identifiable {
         case nyx, htop, log, https
@@ -12,15 +12,15 @@ struct ToolRunnerView: View {
             case .nyx:   return "Nyx"
             case .htop:  return "htop"
             case .log:   return "anon log"
-            case .https: return "HTTPS agent testi"
+            case .https: return "HTTPS agent check"
             }
         }
         var subtitle: String {
             switch self {
-            case .nyx:   return "Sürüm, uptime, trafik, consensus bayrakları, ağırlık, bağlantılar"
-            case .htop:  return "Yük, en çok CPU/bellek kullanan süreçler, disk"
+            case .nyx:   return "Version, uptime, traffic, consensus flags, weight, connections"
+            case .htop:  return "Load, top CPU/memory processes, disk"
             case .log:   return "journalctl -u anon -n 60"
-            case .https: return "Agent :19191 erişilebilir mi"
+            case .https: return "Is the agent on :19191 reachable"
             }
         }
         var icon: String {
@@ -31,8 +31,8 @@ struct ToolRunnerView: View {
             case .https: return "lock.shield"
             }
         }
-        /// nyx/htop tam ekran curses uygulamaları — telefonda tek seferlik eşdeğerleri.
-        /// nyx, anon'un kontrol soketine bağlanıp gerçek relay verisini çeker.
+        /// nyx and htop are full-screen curses programs; these are one-shot
+        /// equivalents. Nyx talks to anon's control socket for the real data.
         var command: String {
             switch self {
             case .nyx:   return RelayScripts.nyx
@@ -46,7 +46,7 @@ struct ToolRunnerView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
     let kind: Kind
-    /// Belirli bir relay için açıldıysa seçici gizlenir.
+    /// When opened for a specific relay the picker is hidden.
     var fixedServer: Server? = nil
 
     @State private var selected: String = ""
@@ -60,7 +60,7 @@ struct ToolRunnerView: View {
     var body: some View {
         Form {
             if fixedServer == nil {
-                Section("Sunucu") {
+                Section("Server") {
                     Picker("Relay", selection: $selected) {
                         ForEach(fleet.servers) { s in Text(s.name).tag(s.name) }
                     }
@@ -72,7 +72,7 @@ struct ToolRunnerView: View {
                     Task { await run() }
                 } label: {
                     HStack {
-                        Label(running ? "Çalışıyor…" : "Çalıştır", systemImage: kind.icon)
+                        Label(running ? "Running…" : "Run", systemImage: kind.icon)
                         if running { Spacer(); ProgressView() }
                     }
                 }
@@ -83,7 +83,7 @@ struct ToolRunnerView: View {
 
             if !SSHKeyStore.hasKey {
                 Section {
-                    Label("SSH anahtarı yok — Araçlar › SSH anahtarı'ndan ekle", systemImage: "exclamationmark.triangle")
+                    Label("No SSH key — add one in Tools › SSH key", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.warn(scheme))
                         .font(.footnote)
                 }
@@ -102,7 +102,7 @@ struct ToolRunnerView: View {
         do {
             let r = try await SSHRunner.shared.run(kind.command, on: s, timeout: 40)
             let ok = (r.exitStatus ?? 0) == 0
-            let text = r.combined.isEmpty ? "(çıktı yok)" : r.combined
+            let text = r.combined.isEmpty ? "(no output)" : r.combined
             output = ToolOutput(title: "\(kind.title) · \(s.name)", text: text, failed: !ok)
             AILog.shared.add(kind: .command, relay: s.name, title: kind.title, detail: text, ok: ok)
         } catch {
@@ -113,14 +113,14 @@ struct ToolRunnerView: View {
     }
 }
 
-/// Config (anonrc) için sunucu seçici — Mac'teki config sekmesinin karşılığı.
+/// Server picker for the anonrc editor — the desktop config tab's equivalent.
 struct AnonrcPickerView: View {
     @EnvironmentObject var fleet: FleetStore
     @State private var selected: String = ""
 
     var body: some View {
         Form {
-            Section("Sunucu") {
+            Section("Server") {
                 Picker("Relay", selection: $selected) {
                     ForEach(fleet.servers) { s in Text(s.name).tag(s.name) }
                 }
@@ -130,10 +130,10 @@ struct AnonrcPickerView: View {
                     NavigationLink {
                         AnonrcEditorView(server: s)
                     } label: {
-                        Label("anonrc'yi aç", systemImage: "slider.horizontal.3")
+                        Label("Open anonrc", systemImage: "slider.horizontal.3")
                     }
                 } footer: {
-                    Text("Dosya SSH ile okunur. Kaydederken önce zaman damgalı yedek alınır, sonra anon servisini yeniden başlatmayı sorar.")
+                    Text("Read over SSH. Saving takes a timestamped backup first, then asks whether to restart the anon service.")
                 }
             }
         }

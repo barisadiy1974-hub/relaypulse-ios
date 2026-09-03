@@ -1,21 +1,21 @@
 import Foundation
 import Crypto
 
-/// Telefonun SSH özel anahtarı — Keychain'de (`sshPrivateKey`).
-/// Filoya ait 3 Mac anahtarı DEĞİL; telefona özel, tek başına iptal edilebilir anahtar.
+/// The phone's dedicated SSH private key — stored in Keychain under "sshPrivateKey".
+/// This is NOT one of the fleet's 3 Mac keys; it is a separate, revocable phone key.
 enum SSHKeyStore {
     static var pem: String { Keychain.get("sshPrivateKey") }
     static var hasKey: Bool { !pem.isEmpty }
 
-    /// PEM'i doğrular ve saklar. Geçersizse hata fırlatır, hiçbir şey yazmaz.
+    /// Validates the PEM and stores it. Throws on invalid input without writing anything.
     static func store(_ pem: String) throws {
-        _ = try OpenSSHKey.ed25519(fromPEM: pem)   // doğrulama
+        _ = try OpenSSHKey.ed25519(fromPEM: pem)   // validate
         Keychain.set(pem.trimmingCharacters(in: .whitespacesAndNewlines), for: "sshPrivateKey")
     }
 
     static func clear() { Keychain.delete("sshPrivateKey") }
 
-    /// Anahtarın SHA256 parmak izi (ssh-keygen -lf ile aynı biçim).
+    /// SHA256 fingerprint of the key (same format as `ssh-keygen -lf`).
     static var fingerprint: String? {
         guard let key = try? OpenSSHKey.curve25519(fromPEM: pem) else { return nil }
         var blob = Data()
@@ -31,8 +31,8 @@ enum SSHKeyStore {
         return "SHA256:\(b64)"
     }
 
-    /// İlk kurulumda `Documents/ssh_key.pem` varsa Keychain'e alır ve dosyayı siler.
-    /// (Mac'ten `devicectl device copy to` ile tohumlamak için.)
+    /// At first launch, reads `Documents/ssh_key.pem`, stores it in Keychain, and deletes the file.
+    /// Used to seed the key from Mac via `devicectl device copy to`.
     static func importSeedFileIfPresent() {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let f = dir.appendingPathComponent("ssh_key.pem")
@@ -40,10 +40,10 @@ enum SSHKeyStore {
               let text = String(data: data, encoding: .utf8) else { return }
         do {
             try store(text)
-            // Sadece basarili olursa sil — yoksa bozuk bir tohum sessizce kaybolurdu.
+            // Only delete on success — a corrupt seed file would otherwise disappear silently.
             try? FileManager.default.removeItem(at: f)
         } catch {
-            NSLog("SSHKeyStore: tohum anahtar okunamadi — \(error.localizedDescription)")
+            NSLog("SSHKeyStore: could not read seed key — \(error.localizedDescription)")
         }
     }
 }

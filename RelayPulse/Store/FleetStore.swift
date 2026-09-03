@@ -10,7 +10,7 @@ final class FleetStore: ObservableObject {
     @Published var pollSec: Int = 120
     @Published var offlineAfter: Int = 2
 
-    /// Delta hesabi icin son basarili olcumler (rx/tx bayt + cpu idle/total + zaman).
+    /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
     private struct Sample { var rx: Double; var tx: Double; var cpuIdle: Double; var cpuTotal: Double; var at: Date }
     private var samples: [String: Sample] = [:]
 
@@ -45,7 +45,7 @@ final class FleetStore: ObservableObject {
         statuses[server.name] ?? RelayStatus(name: server.name)
     }
 
-    // MARK: - Config aktarimi
+    // MARK: - Config import
 
     func apply(_ export: FleetExport, persist: Bool = true) {
         servers = export.servers.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -62,7 +62,7 @@ final class FleetStore: ObservableObject {
         let export = try JSONDecoder().decode(FleetExport.self, from: data)
         guard !export.servers.isEmpty else {
             throw NSError(domain: "RelayPulse", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Dosyada sunucu yok"])
+                          userInfo: [NSLocalizedDescriptionKey: "No servers found in file"])
         }
         apply(export)
     }
@@ -73,7 +73,7 @@ final class FleetStore: ObservableObject {
         ServerStorage.clear()
     }
 
-    // MARK: - Relay ekle / duzenle / sil (standalone kullanim)
+    // MARK: - Add / edit / remove relay
 
     private func persistCurrent() {
         ServerStorage.save(FleetExport(exportedAt: Date().timeIntervalSince1970,
@@ -81,7 +81,7 @@ final class FleetStore: ObservableObject {
                                        servers: servers))
     }
 
-    /// Yeni relay ekler (ad benzersizse). Var olan adı ezmez.
+    /// Adds a relay (name must be unique). Does not overwrite existing names.
     @discardableResult
     func addServer(_ s: Server) -> Bool {
         guard !s.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
@@ -94,7 +94,7 @@ final class FleetStore: ObservableObject {
         return true
     }
 
-    /// Var olan relay'i günceller. `originalName` ad değişmişse eski kaydı taşır.
+    /// Updates an existing relay. `originalName` carries the old record if the name changed.
     func updateServer(_ s: Server, originalName: String) {
         guard let idx = servers.firstIndex(where: { $0.name == originalName }) else { return }
         if s.name != originalName {
@@ -116,7 +116,7 @@ final class FleetStore: ObservableObject {
 
     func persistSettings() { persistCurrent() }
 
-    // MARK: - Poll dongusu
+    // MARK: - Poll loop
 
     func startPolling() {
         guard timer == nil, isConfigured else { return }
@@ -141,7 +141,7 @@ final class FleetStore: ObservableObject {
         let targets = servers
         await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
             var iterator = targets.makeIterator()
-            // 143 host'a aynı anda TLS el sıkışması geçici hataya yol açıyordu — 10'lu pencere.
+            // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
             let maxInFlight = 10
 
             func addNext() {
@@ -163,13 +163,13 @@ final class FleetStore: ObservableObject {
         lastSweep = Date()
     }
 
-    // MARK: - Sonuc isleme + flap dampening
+    // MARK: - Result processing + flap dampening
 
     private func recordSuccess(_ name: String, _ m: AgentMetrics) {
         var st = statuses[name] ?? RelayStatus(name: name)
         let now = Date()
 
-        // rx/tx Mbps + cpu% delta (monitor.js ile ayni)
+        // rx/tx Mbps + cpu% delta — same logic as monitor.js
         if let net = m.net, let prev = samples[name] {
             let dt = now.timeIntervalSince(prev.at)
             if dt > 0 {
@@ -206,7 +206,7 @@ final class FleetStore: ObservableObject {
         st.fails += 1
         st.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         st.lastUpdated = Date()
-        // OFFLINE_AFTER ardisik basarisizliktan once "stale" (sari) — gecici blipleri gizler.
+        // Show "stale" (yellow) for offlineAfter-1 failures before going fully offline.
         st.state = st.fails >= offlineAfter ? .offline : .stale
         statuses[name] = st
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Filo Sağlığı — tek ekranda 143 relay'in nabzı.
-/// Tüm veri FleetStore'daki mevcut poll sonuçlarından türetilir; ek istek atılmaz.
+/// Fleet Health — the whole fleet's pulse on one screen.
+/// Everything is derived from data already collected by FleetStore; no extra requests.
 struct FleetHealthView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
@@ -10,7 +10,7 @@ struct FleetHealthView: View {
         fleet.servers.map { ($0, fleet.status(for: $0)) }
     }
 
-    /// Ele alınması gerekenler: kırmızı → sarı → anon dertli, en kötü önce.
+    /// Needs attention: offline → warning → stale, worst first.
     private var problems: [(Server, RelayStatus)] {
         rows.filter { $0.1.state == .offline || $0.1.state == .stale || $0.1.state == .warn }
             .sorted { a, b in rank(a.1.state) < rank(b.1.state) }
@@ -47,9 +47,9 @@ struct FleetHealthView: View {
 
                     PanelCard {
                         HStack {
-                            big("\(totalConn)", "Toplam bağlantı", Theme.accent(scheme))
+                            big("\(totalConn)", "Total connections", Theme.accent(scheme))
                             Divider().frame(height: 34).overlay(Theme.border(scheme))
-                            big(avgMem.map { "\(Int($0))%" } ?? "—", "Ortalama RAM", Theme.text(scheme))
+                            big(avgMem.map { "\(Int($0))%" } ?? "—", "Average RAM", Theme.text(scheme))
                         }
                     }
 
@@ -57,13 +57,13 @@ struct FleetHealthView: View {
                         PanelCard(stateColor: Theme.ok(scheme)) {
                             HStack(spacing: 10) {
                                 Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.ok(scheme))
-                                Text("Tüm relay'ler sağlıklı")
+                                Text("All relays healthy")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(Theme.text(scheme))
                             }
                         }
                     } else {
-                        section("Dikkat gerektirenler (\(problems.count))") {
+                        section("Needs attention (\(problems.count))") {
                             ForEach(problems, id: \.0.id) { s, st in
                                 NavigationLink(value: s) {
                                     problemRow(s, st)
@@ -74,22 +74,22 @@ struct FleetHealthView: View {
                     }
 
                     if !ramHot.isEmpty {
-                        section("RAM kritik (≥90%)") { list(ramHot) { "\(Int($0.memPct ?? 0))%" } }
+                        section("RAM critical (≥90%)") { list(ramHot) { "\(Int($0.memPct ?? 0))%" } }
                     }
                     if !diskHot.isEmpty {
-                        section("Disk dolmak üzere (≥85%)") { list(diskHot) { "\(Int($0.diskPct ?? 0))%" } }
+                        section("Disk filling up (≥85%)") { list(diskHot) { "\(Int($0.diskPct ?? 0))%" } }
                     }
                     if !cpuHot.isEmpty {
-                        section("CPU yüksek (≥80%)") { list(cpuHot) { "\(Int($0.cpuPct ?? 0))%" } }
+                        section("CPU high (≥80%)") { list(cpuHot) { "\(Int($0.cpuPct ?? 0))%" } }
                     }
                     if !busiest.isEmpty {
-                        section("En yoğun 5 relay") {
+                        section("Busiest 5 relays") {
                             list(busiest) { String(format: "%.1f Mbps", ($0.rxMbps ?? 0) + ($0.txMbps ?? 0)) }
                         }
                     }
 
                     if let t = fleet.lastSweep {
-                        Text("Son tarama: \(t.formatted(date: .omitted, time: .standard))")
+                        Text("Last sweep: \(t.formatted(date: .omitted, time: .standard))")
                             .font(.caption2).foregroundStyle(Theme.muted(scheme))
                             .frame(maxWidth: .infinity).padding(.top, 4)
                     }
@@ -97,13 +97,13 @@ struct FleetHealthView: View {
                 .padding(.horizontal, 12).padding(.top, 6)
             }
             .background(Theme.bg(scheme))
-            .navigationTitle("Filo Sağlığı")
+            .navigationTitle("Fleet Health")
             .navigationDestination(for: Server.self) { RelayDetailView(server: $0) }
             .refreshable { await fleet.sweep() }
         }
     }
 
-    // MARK: - Parçalar
+    // MARK: - Pieces
 
     private func big(_ v: String, _ l: String, _ c: Color) -> some View {
         VStack(spacing: 2) {

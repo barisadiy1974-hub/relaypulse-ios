@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Mac RelayPulse (renderer/styles.css) ile birebir renk paleti.
+/// Color palette — matches Mac RelayPulse renderer/styles.css.
 /// Light = :root, Dark = [data-theme="dark"].
 enum Theme {
     static func bg(_ s: ColorScheme) -> Color        { s == .dark ? hex(0x080A0F) : hex(0xF4F7FB) }
@@ -27,7 +27,7 @@ enum Theme {
     }
 }
 
-/// Kart / panel görünümü — Mac'teki .card ile aynı (gradient, 14px radius, ince kenar).
+/// Card / panel view — matches Mac .card (gradient, 14px radius, thin border).
 struct PanelCard<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     var stateColor: Color?
@@ -51,7 +51,7 @@ struct PanelCard<Content: View>: View {
     }
 }
 
-/// Mac'teki .relay-chip — durum renginde pill.
+/// Mac .relay-chip — state-colored pill badge.
 struct StatePill: View {
     @Environment(\.colorScheme) private var scheme
     let text: String

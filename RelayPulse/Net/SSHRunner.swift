@@ -18,16 +18,16 @@ enum SSHError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noKey:          return "Telefon SSH anahtarı yok — Ayarlar › SSH'ten ekle"
-        case .connect(let m): return "Bağlanamadı: \(m)"
-        case .auth:           return "Kimlik doğrulama reddedildi (anahtar relay'de authorized_keys'te mi?)"
-        case .exec(let m):    return "Komut çalışmadı: \(m)"
+        case .noKey:          return "No SSH key on this phone — add one in Tools › SSH key"
+        case .connect(let m): return "Could not connect: \(m)"
+        case .auth:           return "Authentication refused (is the key in the relay's authorized_keys?)"
+        case .exec(let m):    return "Command failed: \(m)"
         }
     }
 }
 
-/// Relay'e SSH ile bağlanıp tek bir komut çalıştırır (Apple swift-nio-ssh).
-/// Sadece komut çalıştırma — interaktif kabuk yok.
+/// Connects to a relay over SSH and runs one command (Apple swift-nio-ssh).
+/// Command execution only — no interactive shell.
 actor SSHRunner {
     static let shared = SSHRunner()
     private let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
@@ -76,12 +76,12 @@ actor SSHRunner {
                     }
                 }
             }
-            // Kanal kapanana kadar bekle (komut bitti demektir), en fazla `timeout`.
+            // Wait until the channel closes (the command finished), capped by `timeout`.
             try await withThrowingTaskGroup(of: Void.self) { g in
                 g.addTask { try await child.closeFuture.get() }
                 g.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                    throw SSHError.exec("zaman aşımı (\(Int(timeout))s)")
+                    throw SSHError.exec("timed out after \(Int(timeout))s")
                 }
                 try await g.next()
                 g.cancelAll()
@@ -98,11 +98,12 @@ actor SSHRunner {
     }
 }
 
-// MARK: - Kimlik doğrulama
+// MARK: - Authentication
 
 private final class AcceptAllHostKeys: NIOSSHClientServerAuthenticationDelegate {
-    // Relay host anahtarları sabit değil (yeniden kurulum/multi-IP). Kimlik
-    // dogrulamasi ozel anahtarla yapiliyor; Mac tarafi da StrictHostKeyChecking=accept-new.
+    // Relay host keys are not stable (reinstalls, multi-IP boxes). Identity is
+    // proven by the private key; desktop RelayPulse also uses
+    // StrictHostKeyChecking=accept-new.
     func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
         validationCompletePromise.succeed(())
     }
@@ -131,7 +132,7 @@ private final class PrivateKeyAuth: NIOSSHClientUserAuthenticationDelegate {
     }
 }
 
-// MARK: - Komut kanalı
+// MARK: - Command channel
 
 private actor OutputCollector {
     private var out = Data()

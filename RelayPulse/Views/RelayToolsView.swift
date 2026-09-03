@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Tek relay için tüm araçlar bir arada — Araçlar › Relay başına.
-/// Komutlar `RelayScripts`'te; burada sadece o relay'e sabitlenmiş bağlantılar var.
+/// All tools for a single relay — Tools › Per relay.
+/// Commands live in `RelayScripts`; this screen just pins them to one server.
 struct RelayToolsView: View {
     @EnvironmentObject var ai: AppSettings
     @Environment(\.colorScheme) private var scheme
@@ -12,7 +12,7 @@ struct RelayToolsView: View {
 
     var body: some View {
         List {
-            Section("İzleme") {
+            Section("Monitoring") {
                 ForEach(ToolRunnerView.Kind.allCases) { k in
                     NavigationLink {
                         ToolRunnerView(kind: k, fixedServer: server)
@@ -22,11 +22,11 @@ struct RelayToolsView: View {
                 }
             }
 
-            Section("Yapılandırma") {
+            Section("Configuration") {
                 NavigationLink {
                     AnonrcEditorView(server: server)
                 } label: {
-                    label("anonrc düzenle", "/etc/anon/anonrc oku ve yaz", "slider.horizontal.3")
+                    label("Edit anonrc", "Read and write /etc/anon/anonrc", "slider.horizontal.3")
                 }
             }
 
@@ -50,9 +50,9 @@ struct RelayToolsView: View {
                     .disabled(running != nil)
                 }
             } header: {
-                Text("Düzeltme komutları")
+                Text("Fix commands")
             } footer: {
-                Text("Relay'de root olarak çalışır. Mac RelayPulse'taki liste ile aynı.")
+                Text("Runs as root on the relay. Same list as desktop RelayPulse.")
             }
         }
         .navigationTitle(server.name)
@@ -76,7 +76,7 @@ struct RelayToolsView: View {
             do {
                 let r = try await SSHRunner.shared.run(c.command, on: server, timeout: 60)
                 let ok = (r.exitStatus ?? 0) == 0
-                let text = r.combined.isEmpty ? "(çıktı yok)" : r.combined
+                let text = r.combined.isEmpty ? "(no output)" : r.combined
                 output = ToolOutput(title: c.name, text: text, failed: !ok)
                 AILog.shared.add(kind: .command, relay: server.name, title: c.name, detail: text, ok: ok)
             } catch {

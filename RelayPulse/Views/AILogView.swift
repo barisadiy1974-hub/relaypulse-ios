@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// AI ve araç etkinlik kaydı — Mac'teki AI log listesinin karşılığı.
+/// Activity log — diagnoses, commands that ran, key tests and errors.
 struct AILogView: View {
     @ObservedObject private var log = AILog.shared
     @Environment(\.colorScheme) private var scheme
@@ -9,9 +9,9 @@ struct AILogView: View {
     var body: some View {
         Group {
             if log.entries.isEmpty {
-                ContentUnavailableView("Kayıt yok",
+                ContentUnavailableView("Nothing logged yet",
                                        systemImage: "text.badge.checkmark",
-                                       description: Text("AI teşhisi, komut çalıştırma ve anahtar testleri burada listelenir."))
+                                       description: Text("AI diagnoses, commands and key tests show up here."))
             } else {
                 List {
                     ForEach(log.entries) { e in
@@ -20,12 +20,12 @@ struct AILogView: View {
                 }
             }
         }
-        .navigationTitle("AI Kaydı")
+        .navigationTitle("Activity log")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !log.entries.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Temizle", role: .destructive) { log.clear() }
+                    Button("Clear", role: .destructive) { log.clear() }
                 }
             }
         }

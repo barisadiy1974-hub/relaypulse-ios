@@ -1,8 +1,8 @@
 import Foundation
 import Security
 
-/// Küçük Keychain sarmalayıcı — API anahtarları ve SSH sırları için.
-/// Mac tarafı safeStorage kullanıyor; iOS'ta karşılığı Keychain.
+/// Minimal Keychain wrapper for API keys and SSH secrets.
+/// The Mac side uses safeStorage; on iOS the equivalent is Keychain.
 enum Keychain {
     private static let service = "com.baris.relaypulse"
 
@@ -19,7 +19,7 @@ enum Keychain {
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let st = SecItemAdd(add as CFDictionary, nil)
-        if st != errSecSuccess { NSLog("Keychain: '\(key)' yazilamadi, OSStatus=\(st)") }
+        if st != errSecSuccess { NSLog("Keychain: could not write '\(key)', OSStatus=\(st)") }
     }
 
     static func get(_ key: String) -> String {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Röleler sekmesi — filo özeti + filtre + relay kart listesi.
+/// Relays tab — fleet summary + filter + relay card list.
 struct DashboardView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
@@ -9,7 +9,7 @@ struct DashboardView: View {
     @State private var showAdd = false
 
     enum RelayFilter: String, CaseIterable {
-        case all = "Tümü", issues = "Sorunlu", online = "Çevrimiçi"
+        case all = "All", issues = "Issues", online = "Online"
     }
 
     private var visible: [Server] {
@@ -35,7 +35,7 @@ struct DashboardView: View {
                 LazyVStack(spacing: 8) {
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
 
-                    Picker("Filtre", selection: $filter) {
+                    Picker("Filter", selection: $filter) {
                         ForEach(RelayFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
@@ -49,7 +49,7 @@ struct DashboardView: View {
                     }
 
                     if let t = fleet.lastSweep {
-                        Text("Son tarama: \(t.formatted(date: .omitted, time: .standard))")
+                        Text("Last sweep: \(t.formatted(date: .omitted, time: .standard))")
                             .font(.caption2)
                             .foregroundStyle(Theme.muted(scheme))
                             .frame(maxWidth: .infinity)
@@ -60,8 +60,8 @@ struct DashboardView: View {
                 .padding(.top, 6)
             }
             .background(Theme.bg(scheme))
-            .searchable(text: $query, prompt: "Relay veya IP ara")
-            .navigationTitle("Röleler (\(fleet.servers.count))")
+            .searchable(text: $query, prompt: "Search relay or IP")
+            .navigationTitle("Relays (\(fleet.servers.count))")
             .navigationDestination(for: Server.self) { server in
                 RelayDetailView(server: server)
             }
@@ -85,7 +85,7 @@ struct DashboardView: View {
     }
 }
 
-/// Filo özeti / sağlık kartı — 4 durum sayacı + toplam bant genişliği.
+/// Fleet summary card — four state counters plus total bandwidth.
 struct FleetSummaryCard: View {
     @Environment(\.colorScheme) private var scheme
     let agg: (total: Int, online: Int, stale: Int, offline: Int, warn: Int)
@@ -96,17 +96,17 @@ struct FleetSummaryCard: View {
         PanelCard {
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
-                    stat("\(agg.online)", "Çevrimiçi", Theme.ok(scheme))
-                    stat("\(agg.warn)", "Uyarı", Theme.warn(scheme))
-                    stat("\(agg.stale)", "Sarkıyor", Theme.warn(scheme))
-                    stat("\(agg.offline)", "Çevrimdışı", Theme.err(scheme))
+                    stat("\(agg.online)", "Online", Theme.ok(scheme))
+                    stat("\(agg.warn)", "Warning", Theme.warn(scheme))
+                    stat("\(agg.stale)", "Stale", Theme.warn(scheme))
+                    stat("\(agg.offline)", "Offline", Theme.err(scheme))
                 }
                 Divider().overlay(Theme.border(scheme))
                 HStack {
                     Label(String(format: "%.1f Mbps", totalRx), systemImage: "arrow.down")
                         .foregroundStyle(Theme.rx(scheme))
                     Spacer()
-                    Text("\(agg.total) relay")
+                    Text("\(agg.total) relays")
                         .foregroundStyle(Theme.muted(scheme))
                     Spacer()
                     Label(String(format: "%.1f Mbps", totalTx), systemImage: "arrow.up")
@@ -117,14 +117,14 @@ struct FleetSummaryCard: View {
         }
     }
 
-    private func stat(_ v: String, _ l: String, _ c: Color) -> some View {
+    private func stat(_ value: String, _ label: String, _ color: Color) -> some View {
         VStack(spacing: 2) {
-            Text(v).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(c)
-            Text(l).font(.system(size: 10)).foregroundStyle(Theme.muted(scheme))
+            Text(value).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(color)
+            Text(label).font(.system(size: 10)).foregroundStyle(Theme.muted(scheme))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(c.opacity(0.10))
+        .background(color.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
