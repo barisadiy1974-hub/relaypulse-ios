@@ -187,7 +187,7 @@ private struct CommandEditor: View {
     var onSave: (FixCommand) -> Void
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 TextField("Name", text: $command.name)
                 Section("Command (bash, runs as root on the relay)") {

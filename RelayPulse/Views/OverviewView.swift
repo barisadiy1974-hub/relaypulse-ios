@@ -12,7 +12,7 @@ struct OverviewView: View {
     var body: some View {
         WebDashboardView(title: "Overview", url: Self.blog)
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button { openURL(Self.x) } label: {
                         Label("Open X", systemImage: "at")
                     }

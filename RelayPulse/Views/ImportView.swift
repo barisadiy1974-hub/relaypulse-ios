@@ -12,7 +12,7 @@ struct ImportView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             VStack(spacing: 22) {
                 Spacer()
                 Image(systemName: "antenna.radiowaves.left.and.right")
@@ -93,7 +93,7 @@ private struct PasteSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             TextEditor(text: $text)
                 .font(.system(.footnote, design: .monospaced))
                 .autocorrectionDisabled()

@@ -13,7 +13,7 @@ struct MainTabView: View {
     private static let dashboard = URL(string: "https://dashboard.anyone.io")!
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             List {
                 Section {
                     row("Relays", "antenna.radiowaves.left.and.right",
@@ -41,7 +41,7 @@ struct MainTabView: View {
             }
             .navigationTitle("RelayPulse")
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
+            .hideScrollBackground()
             .background(Theme.bg(scheme))
         }
     }

@@ -30,7 +30,7 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
@@ -42,7 +42,11 @@ struct DashboardView: View {
                     .padding(.vertical, 2)
 
                     ForEach(visible) { server in
-                        NavigationLink(value: server) {
+                        // Destination inline rather than value-based navigation:
+                        // NavigationLink(value:) + navigationDestination are iOS 16+.
+                        NavigationLink {
+                            RelayDetailView(server: server)
+                        } label: {
                             RelayCardView(server: server, status: fleet.status(for: server))
                         }
                         .buttonStyle(.plain)
@@ -62,14 +66,11 @@ struct DashboardView: View {
             .background(Theme.bg(scheme))
             .searchable(text: $query, prompt: "Search relay or IP")
             .navigationTitle("Relays (\(fleet.servers.count))")
-            .navigationDestination(for: Server.self) { server in
-                RelayDetailView(server: server)
-            }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     if fleet.isPolling { ProgressView() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
                 }
             }

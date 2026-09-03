@@ -2,7 +2,7 @@ name: RelayPulse
 options:
   bundleIdPrefix: com.baris
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "15.0"
   createIntermediateGroups: true
   groupSortPosition: top
 
@@ -44,4 +44,4 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
-        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"

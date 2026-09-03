@@ -15,7 +15,7 @@ struct ToolOutputSheet: View {
     let output: ToolOutput
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView([.horizontal, .vertical]) {
                 Text(output.text)
                     .font(.system(size: 11, design: .monospaced))
@@ -29,8 +29,8 @@ struct ToolOutputSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } }
-                ToolbarItem(placement: .topBarLeading) {
-                    ShareLink(item: output.text) { Image(systemName: "square.and.arrow.up") }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    ShareTextButton(text: output.text)
                 }
             }
         }

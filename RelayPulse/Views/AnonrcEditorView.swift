@@ -41,7 +41,7 @@ struct AnonrcEditorView: View {
         .navigationTitle(path.isEmpty ? "anonrc" : (path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 if saving { ProgressView() }
                 else { Button("Save") { showSaveConfirm = true }.disabled(!dirty) }
             }

@@ -30,7 +30,7 @@ struct ServerEditView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 Section("Relay") {
                     LabeledField("Name", text: $name, placeholder: "relay-01")

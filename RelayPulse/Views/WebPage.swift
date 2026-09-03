@@ -55,7 +55,7 @@ struct WebDashboardView: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button { reloadToken = UUID() } label: {
                         Image(systemName: "arrow.clockwise")
                     }

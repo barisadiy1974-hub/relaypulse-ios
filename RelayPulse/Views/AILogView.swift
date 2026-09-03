@@ -9,9 +9,9 @@ struct AILogView: View {
     var body: some View {
         Group {
             if log.entries.isEmpty {
-                ContentUnavailableView("Nothing logged yet",
-                                       systemImage: "text.badge.checkmark",
-                                       description: Text("AI diagnoses, commands and key tests show up here."))
+                EmptyStateView(title: "Nothing logged yet",
+                               systemImage: "text.badge.checkmark",
+                               message: "AI diagnoses, commands and key tests show up here.")
             } else {
                 List {
                     ForEach(log.entries) { e in
@@ -23,8 +23,10 @@ struct AILogView: View {
         .navigationTitle("Activity log")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !log.entries.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
+            // The condition sits inside the item, not around it: conditional
+            // toolbar content (ToolbarContentBuilder's buildIf) is iOS 16+.
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !log.entries.isEmpty {
                     Button("Clear", role: .destructive) { log.clear() }
                 }
             }

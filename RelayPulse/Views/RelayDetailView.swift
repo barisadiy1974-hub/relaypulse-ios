@@ -86,7 +86,7 @@ struct RelayDetailView: View {
         .navigationTitle(server.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Edit") { showEdit = true }
             }
         }

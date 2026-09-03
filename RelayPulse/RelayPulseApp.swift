@@ -11,9 +11,37 @@ private enum RelayBackgroundRefresh {
     }
 }
 
+/// Registers the background refresh task the pre-SwiftUI way.
+///
+/// `.backgroundTask(.appRefresh:)` would be tidier but it is iOS 16+, and
+/// `SceneBuilder` does not accept an `if #available` around a scene modifier, so
+/// there is no way to apply it conditionally. Registering here works from iOS 13
+/// on — one code path, and the iPhone 7 on iOS 15 still gets background refresh.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: RelayBackgroundRefresh.identifier,
+            using: nil
+        ) { task in
+            let work = Task { @MainActor in
+                await FleetStore.shared.refreshInBackground()
+                RelayBackgroundRefresh.schedule()
+                task.setTaskCompleted(success: true)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
+        return true
+    }
+}
+
 @main
 struct RelayPulseApp: App {
-    @StateObject private var fleet = FleetStore()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    // Shared instance so the background task handler can reach the same store.
+    @StateObject private var fleet = FleetStore.shared
     @StateObject private var ai = AppSettings()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -31,7 +59,9 @@ struct RelayPulseApp: App {
                         await sshSelfTest()
                     }
                 }
-                .onChange(of: scenePhase) { _, phase in
+                // Single-parameter form: the (old, new) closure is iOS 17+ and the
+                // app supports iOS 15 so an iPhone 7 can run it.
+                .onChange(of: scenePhase) { phase in
                     switch phase {
                     case .active: fleet.startPolling()
                     case .background:
@@ -42,10 +72,6 @@ struct RelayPulseApp: App {
                     @unknown default: break
                     }
                 }
-        }
-        .backgroundTask(.appRefresh(RelayBackgroundRefresh.identifier)) {
-            await fleet.refreshInBackground()
-            RelayBackgroundRefresh.schedule()
         }
     }
 }

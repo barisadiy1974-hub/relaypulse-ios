@@ -3,6 +3,10 @@ import SwiftUI
 
 @MainActor
 final class FleetStore: ObservableObject {
+    /// Single instance so the background-refresh task registered in
+    /// AppDelegate operates on the same store the UI shows.
+    static let shared = FleetStore()
+
     @Published private(set) var servers: [Server] = []
     @Published private(set) var statuses: [String: RelayStatus] = [:]
     @Published private(set) var isPolling = false
@@ -173,6 +177,8 @@ final class FleetStore: ObservableObject {
             lastSweep = Date()
             return
         }
+        // Cap how much SSH fallback this sweep may spend (see SSHMetrics).
+        await SSHMetrics.shared.startSweep()
         await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
             var iterator = targets.makeIterator()
             // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
@@ -190,7 +196,7 @@ final class FleetStore: ObservableObject {
                         // and that was the whole reason the phone showed yellow for
                         // relays the Mac showed green. Costs an SSH round trip on
                         // roughly one or two relays per sweep.
-                        if let m = await SSHMetrics.fetch(s) { return (s.name, .success(m)) }
+                        if let m = await SSHMetrics.shared.fetch(s) { return (s.name, .success(m)) }
                         return (s.name, .failure(error))
                     }
                 }

@@ -18,7 +18,7 @@ struct SSHSettingsView: View {
         Form {
             Section {
                 if hasKey {
-                    LabeledContent("Status") {
+                    LabeledRow("Status") {
                         Label("Key loaded", systemImage: "checkmark.seal.fill")
                             .foregroundStyle(Theme.ok(scheme))
                     }
@@ -67,7 +67,7 @@ struct SSHSettingsView: View {
         .navigationTitle("SSH")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showPaste) {
-            NavigationStack {
+            NavStack {
                 TextEditor(text: $pasted)
                     .font(.system(.caption2, design: .monospaced))
                     .autocorrectionDisabled().textInputAutocapitalization(.never)

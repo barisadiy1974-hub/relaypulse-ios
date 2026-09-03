@@ -66,14 +66,14 @@ struct SettingsView: View {
             Section("License") {
                 switch licenseState {
                 case .licensed(let serial):
-                    LabeledContent("Status", value: "Licensed")
-                    LabeledContent("Serial", value: serial.uppercased())
+                    LabeledRow("Status", value: "Licensed")
+                    LabeledRow("Serial", value: serial.uppercased())
                     Button(role: .destructive) {
                         LicenseStore.deactivate()
                         licenseState = LicenseStore.state
                     } label: { Text("Remove license") }
                 case .trial(let daysLeft):
-                    LabeledContent("Status", value: "\(daysLeft) day\(daysLeft == 1 ? "" : "s") left in trial")
+                    LabeledRow("Status", value: "\(daysLeft) day\(daysLeft == 1 ? "" : "s") left in trial")
                     TextField("RP1-XXXXXXXX-…", text: $licenseInput)
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
@@ -84,7 +84,7 @@ struct SettingsView: View {
                     Button("Activate license") { activateLicense() }
                         .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty)
                 case .expired:
-                    LabeledContent("Status", value: "Trial expired")
+                    LabeledRow("Status", value: "Trial expired")
                     TextField("RP1-XXXXXXXX-…", text: $licenseInput)
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
@@ -101,7 +101,7 @@ struct SettingsView: View {
                 Button(role: .destructive) { showClearConfirm = true } label: {
                     Label("Remove all relays", systemImage: "trash")
                 }
-                LabeledContent("Version", value: appVersion)
+                LabeledRow("Version", value: appVersion)
             } footer: {
                 Text("Monitoring plus on-demand tools. Unattended 24/7 auto-fix stays on desktop RelayPulse — iOS suspends background apps, so a phone cannot do it reliably.")
             }

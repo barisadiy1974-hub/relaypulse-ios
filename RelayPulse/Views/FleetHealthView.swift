@@ -40,7 +40,7 @@ struct FleetHealthView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
@@ -65,7 +65,9 @@ struct FleetHealthView: View {
                     } else {
                         section("Needs attention (\(problems.count))") {
                             ForEach(problems, id: \.0.id) { s, st in
-                                NavigationLink(value: s) {
+                                NavigationLink {
+                                    RelayDetailView(server: s)
+                                } label: {
                                     problemRow(s, st)
                                 }
                                 .buttonStyle(.plain)
@@ -98,7 +100,6 @@ struct FleetHealthView: View {
             }
             .background(Theme.bg(scheme))
             .navigationTitle("Fleet Health")
-            .navigationDestination(for: Server.self) { RelayDetailView(server: $0) }
             .refreshable { await fleet.sweep() }
         }
     }
@@ -140,7 +141,10 @@ struct FleetHealthView: View {
 
     private func list(_ items: [(Server, RelayStatus)], value: @escaping (RelayStatus) -> String) -> some View {
         ForEach(items.prefix(8), id: \.0.id) { s, st in
-            NavigationLink(value: s) {
+            // Inline destination: value-based navigation is iOS 16+.
+            NavigationLink {
+                RelayDetailView(server: s)
+            } label: {
                 HStack {
                     Circle().fill(st.state.color(scheme)).frame(width: 7, height: 7)
                     Text(s.name).font(.system(size: 13)).foregroundStyle(Theme.text(scheme))

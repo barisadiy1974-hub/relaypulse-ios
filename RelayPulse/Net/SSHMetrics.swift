@@ -11,14 +11,29 @@ import Foundation
 /// The remote side runs the installed agent's own `collect()`, so what comes back
 /// is the identical JSON the HTTP endpoint serves and `AgentMetrics` decodes it
 /// with no separate parser to keep in sync.
-enum SSHMetrics {
+///
+/// An actor on purpose: SSH is far heavier than an HTTPS GET, and the poll loop
+/// can hit this from several tasks at once. Serialising keeps a phone from
+/// opening a pile of simultaneous SSH connections, and `budget` caps how many a
+/// single sweep may spend — without it a network outage would mean 143 SSH
+/// attempts, each up to `timeout`, long past the poll interval.
+actor SSHMetrics {
+    static let shared = SSHMetrics()
 
-    /// Returns nil when no SSH key is configured — callers then keep the agent's
-    /// error, exactly as before this fallback existed.
-    static func fetch(_ server: Server) async -> AgentMetrics? {
-        guard SSHKeyStore.hasKey else { return nil }
+    private var budget = 0
+
+    /// Called once at the start of a sweep. Transient agent losses run ~1% of a
+    /// 143-relay fleet, so a handful of attempts covers the real cases; beyond
+    /// that the agent is probably down for a reason SSH will not fix either.
+    func startSweep(budget: Int = 5) { self.budget = budget }
+
+    /// Returns nil when the budget is spent, no SSH key is configured, or the
+    /// relay does not answer — callers then keep the agent's original error.
+    func fetch(_ server: Server) async -> AgentMetrics? {
+        guard budget > 0, SSHKeyStore.hasKey else { return nil }
+        budget -= 1
         do {
-            let r = try await SSHRunner.shared.run(RelayScripts.metrics, on: server, timeout: 20)
+            let r = try await SSHRunner.shared.run(RelayScripts.metrics, on: server, timeout: 12)
             // The script prints one JSON object; anything else (login banners,
             // "python3: not found") is not usable and must not be treated as a
             // successful poll.

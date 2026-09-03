@@ -57,7 +57,13 @@ actor SSHRunner {
         } catch {
             throw SSHError.connect(error.localizedDescription)
         }
-        defer { try? channel.close().wait() }
+        // Fire-and-forget close. `channel.close().wait()` BLOCKS the calling
+        // thread, and these run on Swift concurrency's cooperative pool, which
+        // has only a handful of threads. One SSH at a time (the Tools screens)
+        // got away with it; the poll loop's SSH fallback can start several at
+        // once, and blocking that many pool threads hangs the app until the
+        // watchdog kills it — the SIGKILL seen on device 2026-09-03.
+        defer { channel.close(promise: nil) }
 
         let collector = OutputCollector()
         do {
