@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RelayPulse — Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         max-width: 780px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  h2 { font-size: 21px; margin-top: 40px; padding-top: 18px; border-top: 1px solid #8883; }
+  h3 { font-size: 17px; margin-top: 26px; }
+  .updated { color: #888; font-size: 14px; margin-top: 0; }
+  ul { padding-left: 22px; }
+  code { background: #8882; padding: 1px 5px; border-radius: 4px; }
+  .box { background: #8881; border-left: 3px solid #6a8; padding: 12px 16px; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<h1>RelayPulse — Privacy Policy</h1>
+<p class="updated">Last updated: 4 September 2026 · Applies to RelayPulse for iPhone and RelayPulse for macOS</p>
+
+<div class="box">
+<strong>The short version:</strong> RelayPulse has no backend. We operate no servers, we
+receive no data from the app, and we have no account system. The app talks only to the
+servers <em>you</em> configure, and everything it stores stays on your own device.
+</div>
+
+<h2>What the app connects to</h2>
+<p>RelayPulse is an administration tool for servers you already own. It connects only to
+destinations you enter yourself:</p>
+<ul>
+  <li><strong>Your relay servers</strong> — over SSH, and/or over HTTPS to the optional
+      monitoring agent you install on them.</li>
+  <li><strong>RelayPulse on your Mac</strong> (iPhone app only, optional) — over your local
+      network, to read the fleet status your Mac has already collected.</li>
+  <li><strong>Your AI provider</strong> (optional) — only if you enable AI-assisted
+      diagnosis and supply your own API key. In that case the error message and recent log
+      lines from the affected server are sent to OpenAI or Anthropic under your own account
+      and their privacy policy. This feature is off unless you turn it on.</li>
+  <li><strong>Public Anyone Protocol pages</strong> — the in-app links to the Anyone
+      dashboard, blog and social accounts open normally in a web view.</li>
+</ul>
+<p>There is no RelayPulse server anywhere in that list. Nothing is proxied through us.</p>
+
+<h2>What is stored, and where</h2>
+<p>All of it stays on your device. Nothing is uploaded to us.</p>
+<ul>
+  <li><strong>SSH private key and passwords</strong> — stored in the system
+      <strong>Keychain</strong> (iOS) or with <strong>Encrypted Storage</strong> (macOS,
+      Electron <code>safeStorage</code>), never in plain files.</li>
+  <li><strong>Agent tokens</strong> — same protected storage.</li>
+  <li><strong>Server list</strong> (names, host addresses, ports, wallet addresses you enter)
+      — in the app's own storage on the device.</li>
+  <li><strong>Measurements</strong> (uptime, bandwidth, CPU, memory, connection counts) —
+      kept locally so the app can show history and detect problems.</li>
+  <li><strong>AI settings</strong> — your API key goes to the Keychain; the rest are ordinary
+      settings.</li>
+</ul>
+
+<h2>What we collect</h2>
+<p><strong>Nothing.</strong> RelayPulse contains no analytics, no crash reporting SDK, no
+advertising, no tracking identifiers, and no third-party telemetry. We cannot see your
+servers, your keys, your measurements, or even whether you use the app.</p>
+
+<h2>Demo mode</h2>
+<p>The app ships with a "Demo data" switch that fills the screens with a fictional sample
+fleet so you can look around before adding real servers. While demo mode is on, the app
+makes no network connections at all. The sample addresses are from the ranges reserved for
+documentation (RFC 5737) and belong to no real machine.</p>
+
+<h2>Local network access (iPhone)</h2>
+<p>iOS asks for permission to find devices on your local network. RelayPulse uses this only
+to reach RelayPulse running on your own Mac, at the address you type in yourself. It does
+not scan or enumerate your network.</p>
+
+<h2>Data sharing</h2>
+<p>We do not sell, share, rent, or transfer any data, because we never receive any. The only
+data leaving your device goes to the servers you configured, and — if you explicitly enable
+it — to the AI provider whose key you supplied.</p>
+
+<h2>Children</h2>
+<p>RelayPulse is a technical administration tool intended for adults who operate their own
+servers. It is not directed at children and collects no personal information from anyone.</p>
+
+<h2>Your rights</h2>
+<p>Because all data is on your device and under your control, you can inspect it in the app,
+change it, or remove it at any time. Deleting the app removes everything it stored,
+including the keys held in the Keychain.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes in a way that affects what the app does with your data, the updated
+version will be published at this address with a new date at the top.</p>
+
+<h2>Contact</h2>
+<p>Questions about privacy or this policy:
+<a href="mailto:baris.adiy1974@gmail.com">baris.adiy1974@gmail.com</a></p>
+
+</body>
+</html>
