@@ -8,7 +8,7 @@ final class FleetStore: ObservableObject {
     @Published private(set) var isPolling = false
     @Published private(set) var lastSweep: Date?
     @Published var pollSec: Int = 120
-    @Published var offlineAfter: Int = 2
+    @Published var offlineAfter: Int = 3
     @Published private(set) var bridge: MacBridge?
 
     /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
@@ -182,7 +182,17 @@ final class FleetStore: ObservableObject {
                 guard let s = iterator.next() else { return }
                 group.addTask {
                     do { return (s.name, .success(try await AgentClient.shared.fetch(s))) }
-                    catch { return (s.name, .failure(error)) }
+                    catch {
+                        // Agent unreachable — ask over SSH before calling the relay
+                        // down, which is what the desktop app does. Measured
+                        // 2026-09-03: ~1% of a 143-host sweep loses its agent reply
+                        // purely to transient noise while the box answers SSH fine,
+                        // and that was the whole reason the phone showed yellow for
+                        // relays the Mac showed green. Costs an SSH round trip on
+                        // roughly one or two relays per sweep.
+                        if let m = await SSHMetrics.fetch(s) { return (s.name, .success(m)) }
+                        return (s.name, .failure(error))
+                    }
                 }
             }
             for _ in 0..<maxInFlight { addNext() }
@@ -254,8 +264,14 @@ final class FleetStore: ObservableObject {
         st.fails += 1
         st.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         st.lastUpdated = Date()
-        // Show "stale" (yellow) for offlineAfter-1 failures before going fully offline.
-        st.state = st.fails >= offlineAfter ? .offline : .stale
+        // Red after offlineAfter misses, yellow one miss earlier. A SINGLE missed
+        // poll keeps the last good reading and stays green: measured 2026-09-03,
+        // ~1% of a 143-host sweep fails transiently while those same hosts answer
+        // in ~105ms when probed on their own. Matches the desktop app's threshold.
+        let staleAfter = max(1, offlineAfter - 1)
+        st.state = st.fails >= offlineAfter ? .offline
+            : st.fails >= staleAfter ? .stale
+            : .online
         statuses[name] = st
     }
 }

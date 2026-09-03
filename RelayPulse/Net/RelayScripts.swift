@@ -160,6 +160,26 @@ enum RelayScripts {
     ss -tnlp 2>/dev/null | grep 19191 || echo "(nothing listening on 19191)"
     """#
 
+    /// SSH fallback for the poll loop, used when the HTTPS agent on :19191 does
+    /// not answer. Rather than re-collecting the metrics with a separate shell
+    /// script (which would drift from the agent), it imports the agent module
+    /// already installed on the relay and calls its own `collect()`. The output
+    /// is therefore byte-for-byte the JSON the HTTP endpoint would have returned,
+    /// so `AgentMetrics` decodes it unchanged.
+    ///
+    /// This is what lets the phone match the desktop app: the desktop falls back
+    /// to SSH when the agent is unreachable (monitor.js), so a relay whose agent
+    /// hiccups but whose SSH is fine stays green there. Without this the phone
+    /// had only one measurement path and showed yellow for the same relay.
+    static let metrics = #"""
+    python3 - <<'PYEOF'
+    import sys, json
+    sys.path.insert(0, "/opt/anyone-agent")
+    import agent
+    print(json.dumps(agent.collect()))
+    PYEOF
+    """#
+
     /// Locates the live anonrc and prints `PATH=<path>` then `---` then the contents.
     static let readAnonrc = #"""
     for p in /etc/anon/anonrc /etc/anon/anonrc-* /etc/anon/instances/*/anonrc /usr/local/etc/anon/anonrc /etc/tor/torrc; do
