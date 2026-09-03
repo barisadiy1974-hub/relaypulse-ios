@@ -33,6 +33,20 @@ struct DashboardView: View {
         NavStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
+                    if fleet.demoMode {
+                        HStack(spacing: 8) {
+                            Image(systemName: "eye.fill")
+                            Text(DemoFleet.bannerText).font(.footnote.weight(.semibold))
+                            Spacer()
+                            Button("Turn off") { fleet.demoMode = false }
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .padding(10)
+                        .background(Theme.warn(scheme).opacity(0.15))
+                        .foregroundStyle(Theme.warn(scheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
 
                     Picker("Filter", selection: $filter) {

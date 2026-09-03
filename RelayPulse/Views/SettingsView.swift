@@ -46,6 +46,14 @@ struct SettingsView: View {
                 Text("Relays (\(fleet.servers.count))")
             }
 
+            Section {
+                Toggle("Demo data", isOn: $fleet.demoMode)
+                Text("Fills the app with a sample fleet so you can look around before adding your own relays. No network connections are made while this is on.")
+                    .font(.footnote).foregroundStyle(Theme.muted(scheme))
+            } header: {
+                Text("Try it out")
+            }
+
             Section("Monitoring") {
                 Picker("Poll interval", selection: Binding(
                     get: { fleet.pollSec },

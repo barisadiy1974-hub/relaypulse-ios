@@ -7,6 +7,16 @@ final class FleetStore: ObservableObject {
     /// AppDelegate operates on the same store the UI shows.
     static let shared = FleetStore()
 
+    /// Demo modu: gercek filo yerine uydurma veri gosterilir. App Review'in
+    /// uygulamayi test edebilmesi ve magaza gorsellerinin gercek filo verisi
+    /// icermemesi icin gerekli. Ag baglantisi kurulmaz.
+    @Published var demoMode: Bool = UserDefaults.standard.bool(forKey: "demoMode") {
+        didSet {
+            UserDefaults.standard.set(demoMode, forKey: "demoMode")
+            applyDemoMode()
+        }
+    }
+
     @Published private(set) var servers: [Server] = []
     @Published private(set) var statuses: [String: RelayStatus] = [:]
     @Published private(set) var isPolling = false
@@ -20,6 +30,8 @@ final class FleetStore: ObservableObject {
     private var samples: [String: Sample] = [:]
 
     private var timer: Task<Void, Never>?
+
+    private var demoTimer: Task<Void, Never>?
     private var backgroundCursor = 0
 
     init() {
@@ -127,7 +139,42 @@ final class FleetStore: ObservableObject {
 
     // MARK: - Poll loop
 
+    /// Demo acilinca uydurma filo yuklenir; kapaninca kaydedilmis gercek
+    /// yapilandirmaya donulur.
+    func applyDemoMode() {
+        if demoMode {
+            stopPolling()
+            servers = DemoFleet.servers
+            statuses = DemoFleet.statuses()
+            lastSweep = Date()
+            startDemoTicker()
+        } else {
+            stopDemoTicker()
+            statuses = [:]
+            servers = []
+            if let export = ServerStorage.load() { apply(export, persist: false) }
+            startPolling()
+        }
+    }
+
+    private func startDemoTicker() {
+        stopDemoTicker()
+        demoTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await MainActor.run {
+                    guard let self, self.demoMode else { return }
+                    self.statuses = DemoFleet.statuses()
+                    self.lastSweep = Date()
+                }
+            }
+        }
+    }
+
+    private func stopDemoTicker() { demoTimer?.cancel(); demoTimer = nil }
+
     func startPolling() {
+        guard !demoMode else { applyDemoMode(); return }
         guard timer == nil, isConfigured else { return }
         timer = Task { [weak self] in
             while !Task.isCancelled {
@@ -159,6 +206,7 @@ final class FleetStore: ObservableObject {
     }
 
     private func sweep(_ targets: [Server]) async {
+        guard !demoMode else { return }   // demo veride ag baglantisi kurulmaz
         guard !isPolling, isConfigured else { return }
         isPolling = true
         defer { isPolling = false }
