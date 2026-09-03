@@ -54,10 +54,47 @@ struct Server: Codable, Identifiable, Hashable {
     }
 }
 
+/// Optional Mac RelayPulse bridge. When present, the Mac is the monitoring and
+/// Auto-Fix authority; the phone only reads its authenticated snapshots.
+struct MacBridge: Codable, Hashable {
+    var host: String
+    var port: Int = 8787
+    var token: String
+
+    private enum CodingKeys: String, CodingKey { case host, hosts, port, token }
+
+    init(host: String, port: Int = 8787, token: String) {
+        self.host = host
+        self.port = port
+        self.token = token
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        host = try c.decodeIfPresent(String.self, forKey: .host)
+            ?? c.decodeIfPresent([String].self, forKey: .hosts)?.first
+            ?? ""
+        guard !host.isEmpty else {
+            throw DecodingError.dataCorruptedError(forKey: .host, in: c,
+                                                    debugDescription: "Mac bridge host is missing")
+        }
+        port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 8787
+        token = try c.decode(String.self, forKey: .token)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(host, forKey: .host)
+        try c.encode(port, forKey: .port)
+        try c.encode(token, forKey: .token)
+    }
+}
+
 /// Full export file (Mac export output).
 struct FleetExport: Codable {
     var exportedAt: Double?
     var pollSec: Int?
     var offlineAfter: Int?
+    var bridge: MacBridge?
     var servers: [Server]
 }

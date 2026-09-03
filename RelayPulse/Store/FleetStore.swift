@@ -9,12 +9,14 @@ final class FleetStore: ObservableObject {
     @Published private(set) var lastSweep: Date?
     @Published var pollSec: Int = 120
     @Published var offlineAfter: Int = 2
+    @Published private(set) var bridge: MacBridge?
 
     /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
     private struct Sample { var rx: Double; var tx: Double; var cpuIdle: Double; var cpuTotal: Double; var at: Date }
     private var samples: [String: Sample] = [:]
 
     private var timer: Task<Void, Never>?
+    private var backgroundCursor = 0
 
     init() {
         if let export = ServerStorage.load() {
@@ -51,6 +53,9 @@ final class FleetStore: ObservableObject {
         servers = export.servers.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         if let p = export.pollSec { pollSec = max(30, p) }
         if let o = export.offlineAfter { offlineAfter = max(1, o) }
+        // iPhone kendi agent baglantilarini kullanir; Mac'in acik olmasina
+        // veya yerel bridge API'sine bagimli degildir.
+        bridge = nil
         var next: [String: RelayStatus] = [:]
         for s in servers { next[s.name] = statuses[s.name] ?? RelayStatus(name: s.name) }
         statuses = next
@@ -77,7 +82,7 @@ final class FleetStore: ObservableObject {
 
     private func persistCurrent() {
         ServerStorage.save(FleetExport(exportedAt: Date().timeIntervalSince1970,
-                                       pollSec: pollSec, offlineAfter: offlineAfter,
+                                       pollSec: pollSec, offlineAfter: offlineAfter, bridge: bridge,
                                        servers: servers))
     }
 
@@ -134,11 +139,40 @@ final class FleetStore: ObservableObject {
     }
 
     func sweep() async {
+        await sweep(servers)
+    }
+
+    /// iOS arka plan yenilemesi en fazla kisa bir calisma suresi verir. Tum
+    /// filoyu yeniden baglamaya calismak yerine her seferinde donusen kucuk bir
+    /// grup kontrol edilir; uygulama yeniden one gelince normal tam tur devam eder.
+    func refreshInBackground() async {
+        guard !servers.isEmpty else { return }
+        let batchSize = min(10, servers.count)
+        let start = backgroundCursor % servers.count
+        let targets = (0..<batchSize).map { servers[(start + $0) % servers.count] }
+        backgroundCursor = (start + batchSize) % servers.count
+        await sweep(targets)
+    }
+
+    private func sweep(_ targets: [Server]) async {
         guard !isPolling, isConfigured else { return }
         isPolling = true
         defer { isPolling = false }
 
-        let targets = servers
+        if let bridge {
+            do {
+                let payload = try await BridgeClient.fetch(bridge)
+                let byName = Dictionary(uniqueKeysWithValues: payload.relays.map { ($0.name, $0) })
+                for s in targets {
+                    if let r = byName[s.name] { recordBridgeSuccess(r) }
+                    else { recordFailure(s.name, BridgeClient.BridgeError.decode("relay missing from Mac snapshot")) }
+                }
+            } catch {
+                for s in targets { recordFailure(s.name, error) }
+            }
+            lastSweep = Date()
+            return
+        }
         await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
             var iterator = targets.makeIterator()
             // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
@@ -199,6 +233,20 @@ final class FleetStore: ObservableObject {
         st.cpuCount = m.cpuCount
         st.state = m.anonHealthy ? .online : .warn
         statuses[name] = st
+    }
+
+    private func recordBridgeSuccess(_ r: BridgeClient.Relay) {
+        var st = statuses[r.name] ?? RelayStatus(name: r.name)
+        st.fails = 0
+        st.lastError = r.error
+        st.lastUpdated = r.ts.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date()
+        st.anonLabel = r.anon ?? "—"
+        st.anonHealthy = r.anon == "active" || r.anon == "activating"
+        st.conn = r.conn.map { Int($0) }; st.rxMbps = r.rxMbps; st.txMbps = r.txMbps
+        st.memPct = r.memPct; st.cpuPct = r.cpuPct; st.publicIp = r.publicIp
+        st.uptime = r.uptimeSec.map { String(format: "%.0fs", $0) }
+        st.state = RelayState(rawValue: r.state) ?? (st.anonHealthy ? .online : .warn)
+        statuses[r.name] = st
     }
 
     private func recordFailure(_ name: String, _ error: Error) {

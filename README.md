@@ -10,6 +10,16 @@ Monitor your [Anyone Protocol](https://anyone.io) relay fleet from your iPhone. 
 - **AI Diagnostics** — tap "Diagnose with AI" on any relay card; the model reads logs and suggests a fix command (OpenAI or Claude)
 - **14-day free trial**, then a one-time license key (same format as desktop RelayPulse)
 
+## Install (TestFlight Beta)
+
+[![TestFlight](https://img.shields.io/badge/TestFlight-Join%20Beta-0d96f6?logo=apple)](https://testflight.apple.com/join/PLACEHOLDER)
+
+1. iPhone'unda TestFlight uygulamasını aç (yoksa [App Store'dan](https://apps.apple.com/app/testflight/id899247664) indir)
+2. Yukarıdaki linke tıkla → **Accept** → **Install**
+3. Uygulama iPhone'una kurulur, güncellemeler otomatik gelir
+
+> TestFlight bağlantısı yakında aktif olacak. Bu repo'yu izle (Watch → Releases).
+
 ## Requirements
 
 - iPhone running iOS 17.0+

@@ -1,4 +1,15 @@
+import BackgroundTasks
 import SwiftUI
+
+private enum RelayBackgroundRefresh {
+    static let identifier = "com.baris.relaypulse.refresh"
+
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+}
 
 @main
 struct RelayPulseApp: App {
@@ -23,10 +34,18 @@ struct RelayPulseApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active: fleet.startPolling()
-                    case .background, .inactive: fleet.stopPolling()
+                    case .background:
+                        fleet.stopPolling()
+                        RelayBackgroundRefresh.schedule()
+                    case .inactive:
+                        break
                     @unknown default: break
                     }
                 }
+        }
+        .backgroundTask(.appRefresh(RelayBackgroundRefresh.identifier)) {
+            await fleet.refreshInBackground()
+            RelayBackgroundRefresh.schedule()
         }
     }
 }
