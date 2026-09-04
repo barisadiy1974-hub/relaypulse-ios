@@ -8,12 +8,21 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.0.5"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "1.0.6"
+    CURRENT_PROJECT_VERSION: "7"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: D694LXAZFQ
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+  configs:
+    # App Store gonderimi manuel imza ister. Ayar proje seviyesinde durur;
+    # SPM bagimliliklari ayri proje oldugu icin etkilenmez (komut satirindan
+    # verilirse onlarla catisir ve arsivleme basarisiz olur).
+    Release:
+      CODE_SIGN_STYLE: Manual
+      PROVISIONING_PROFILE_SPECIFIER: RelayPulse AppStore Distribution
+      CODE_SIGN_IDENTITY: "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
+      "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
 
 # SSH: Apple'ın resmi swift-nio-ssh'i doğrudan kullanılıyor.
 # Citadel (yaygın sarmalayıcı) 0.12.1'de swift-nio-ssh'i üçüncü taraf bir
