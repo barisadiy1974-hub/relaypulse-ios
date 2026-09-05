@@ -8,7 +8,7 @@ Monitor your [Anyone Protocol](https://anyone.io) relay fleet from your iPhone. 
 - **Fleet Health** — see relays needing attention, RAM / disk / CPU hot lists at a glance
 - **SSH tools** — Nyx relay stats, logs, htop summary, and anonrc editor over SSH
 - **AI Diagnostics** — tap "Diagnose with AI" on any relay card; the model reads logs and suggests a fix command (OpenAI or Claude)
-- **14-day free trial**, then a one-time license key (same format as desktop RelayPulse)
+- **14-day free trial**, then a one-time RelayPulse Pro purchase through Apple
 
 ## Install (TestFlight Beta)
 
@@ -58,7 +58,7 @@ ssh-copy-id -i ~/.ssh/id_ed25519_relaypulse_iphone.pub root@<relay-host>
 | `Net/SSHRunner.swift` | Apple swift-nio-ssh, ed25519 auth, command exec |
 | `Net/AIFixer.swift` | OpenAI gpt-4o-mini / Claude claude-haiku-4-5 diagnosis |
 | `Store/FleetStore.swift` | Poll loop, flap dampening, metric delta calc |
-| `Store/LicenseStore.swift` | Ed25519 offline license verification (14-day trial) |
+| `Store/PurchaseStore.swift` | StoreKit 2 Pro entitlement and 14-day trial |
 
 **SSH library:** Apple's official [swift-nio-ssh](https://github.com/apple/swift-nio-ssh) — no third-party forks.
 
@@ -79,4 +79,4 @@ Build target: `RelayPulse` → your iPhone or simulator.
 
 ## License
 
-14-day free trial. License keys sold at [relaypulse.app](https://barisadiy1974-hub.github.io/relaypulse) — same key works on iOS and desktop.
+14-day free trial. RelayPulse Pro is purchased once through Apple In-App Purchase on iOS. The Mac app keeps its separate desktop licensing flow.

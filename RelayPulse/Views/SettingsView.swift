@@ -9,9 +9,7 @@ struct SettingsView: View {
     @State private var editing: Server?
     @State private var showClearConfirm = false
     @State private var error: String?
-    @State private var licenseState = LicenseStore.state
-    @State private var licenseInput = ""
-    @State private var licenseError = ""
+    @EnvironmentObject private var purchases: PurchaseStore
 
     private let intervals = [30, 60, 120, 300, 600]
 
@@ -72,36 +70,23 @@ struct SettingsView: View {
             }
 
             Section("License") {
-                switch licenseState {
-                case .licensed(let serial):
-                    LabeledRow("Status", value: "Licensed")
-                    LabeledRow("Serial", value: serial.uppercased())
-                    Button(role: .destructive) {
-                        LicenseStore.deactivate()
-                        licenseState = LicenseStore.state
-                    } label: { Text("Remove license") }
-                case .trial(let daysLeft):
-                    LabeledRow("Status", value: "\(daysLeft) day\(daysLeft == 1 ? "" : "s") left in trial")
-                    TextField("RP1-XXXXXXXX-…", text: $licenseInput)
-                        .font(.system(.body, design: .monospaced))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.characters)
-                    if !licenseError.isEmpty {
-                        Text(licenseError).font(.caption).foregroundStyle(Theme.err(scheme))
-                    }
-                    Button("Activate license") { activateLicense() }
-                        .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                case .expired:
+                if purchases.isEntitled {
+                    LabeledRow("Status", value: "RelayPulse Lifetime")
+                } else if purchases.trialDaysLeft > 0 {
+                    LabeledRow("Status", value: "\(purchases.trialDaysLeft) day\(purchases.trialDaysLeft == 1 ? "" : "s") left in trial")
+                } else {
                     LabeledRow("Status", value: "Trial expired")
-                    TextField("RP1-XXXXXXXX-…", text: $licenseInput)
-                        .font(.system(.body, design: .monospaced))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.characters)
-                    if !licenseError.isEmpty {
-                        Text(licenseError).font(.caption).foregroundStyle(Theme.err(scheme))
+                }
+                if let product = purchases.product {
+                    Button("Purchase RelayPulse Lifetime (\(product.displayPrice))") {
+                        Task { await purchases.purchase() }
                     }
-                    Button("Activate license") { activateLicense() }
-                        .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Button("Restore Purchases") {
+                    Task { await purchases.restorePurchases() }
+                }
+                if let message = purchases.errorMessage {
+                    Text(message).font(.caption).foregroundStyle(Theme.err(scheme))
                 }
             }
 
@@ -132,17 +117,6 @@ struct SettingsView: View {
         .confirmationDialog("Remove every relay definition?", isPresented: $showClearConfirm, titleVisibility: .visible) {
             Button("Remove", role: .destructive) { fleet.clearConfig() }
             Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private func activateLicense() {
-        let k = licenseInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if LicenseStore.activate(k) {
-            licenseState = LicenseStore.state
-            licenseInput = ""
-            licenseError = ""
-        } else {
-            licenseError = "Invalid license key."
         }
     }
 

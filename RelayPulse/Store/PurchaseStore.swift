@@ -1,0 +1,107 @@
+import Foundation
+import StoreKit
+
+/// StoreKit 2 entitlement and 14-day trial state for the iOS app.
+/// The matching non-consumable product must be created in App Store Connect.
+@MainActor
+final class PurchaseStore: ObservableObject {
+    static let productID = "com.baris.relaypulse.pro.lifetime"
+
+    @Published private(set) var product: Product?
+    @Published private(set) var isEntitled = false
+    @Published private(set) var errorMessage: String?
+
+    private static let firstLaunchKey = "firstLaunchAt"
+    private var updatesTask: Task<Void, Never>?
+
+    init() {
+        updatesTask = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+                await self.handle(result)
+            }
+        }
+    }
+
+    deinit { updatesTask?.cancel() }
+
+    var firstLaunch: Date {
+        if let t = UserDefaults.standard.object(forKey: Self.firstLaunchKey) as? Double {
+            return Date(timeIntervalSince1970: t)
+        }
+        let now = Date()
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.firstLaunchKey)
+        return now
+    }
+
+    var trialDaysLeft: Int {
+        max(0, 14 - Int(Date().timeIntervalSince(firstLaunch) / 86_400))
+    }
+
+    var hasAccess: Bool { isEntitled || trialDaysLeft > 0 }
+
+    func start() async {
+        _ = firstLaunch
+        await refreshEntitlement()
+        do {
+            product = try await Product.products(for: [Self.productID]).first
+        } catch {
+            errorMessage = "The purchase option is temporarily unavailable."
+        }
+    }
+
+    func purchase() async {
+        errorMessage = nil
+        guard let product else {
+            errorMessage = "The purchase option is not available yet."
+            return
+        }
+        do {
+            switch try await product.purchase() {
+            case .success(let result):
+                await handle(result)
+            case .userCancelled:
+                break
+            case .pending:
+                errorMessage = "Purchase is pending approval."
+            @unknown default:
+                errorMessage = "The purchase could not be completed."
+            }
+        } catch {
+            errorMessage = "The purchase could not be completed."
+        }
+    }
+
+    func restorePurchases() async {
+        errorMessage = nil
+        do {
+            try await AppStore.sync()
+            await refreshEntitlement()
+            if !isEntitled {
+                errorMessage = "No previous RelayPulse Lifetime purchase was found."
+            }
+        } catch {
+            errorMessage = "Purchases could not be restored."
+        }
+    }
+
+    private func refreshEntitlement() async {
+        var entitled = false
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result,
+               transaction.productID == Self.productID,
+               transaction.revocationDate == nil {
+                entitled = true
+            }
+        }
+        isEntitled = entitled
+    }
+
+    private func handle(_ result: VerificationResult<Transaction>) async {
+        guard case .verified(let transaction) = result else { return }
+        if transaction.productID == Self.productID {
+            isEntitled = transaction.revocationDate == nil
+        }
+        await transaction.finish()
+    }
+}

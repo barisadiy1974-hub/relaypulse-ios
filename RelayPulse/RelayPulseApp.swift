@@ -52,7 +52,6 @@ struct RelayPulseApp: App {
                 .environmentObject(ai)
                 .tint(Color(.sRGB, red: 0.184, green: 0.49, blue: 0.965)) // matches Mac --accent
                 .task {
-                    _ = LicenseStore.firstLaunch  // record first-launch date if not set
                     SSHKeyStore.importSeedFileIfPresent()
                     ai.importSeedKeyIfPresent()
                     if ProcessInfo.processInfo.arguments.contains("--ssh-selftest") {
@@ -94,15 +93,13 @@ private func sshSelfTest() async {
 
 struct RootView: View {
     @EnvironmentObject var fleet: FleetStore
-    @State private var licenseState = LicenseStore.state
+    @StateObject private var purchases = PurchaseStore()
 
     var body: some View {
         Group {
-            switch licenseState {
-            case .expired:
+            if !purchases.hasAccess {
                 TrialExpiredView()
-                    .onAppear { licenseState = LicenseStore.state }
-            case .licensed, .trial:
+            } else {
                 if fleet.isConfigured {
                     MainTabView()
                 } else {
@@ -110,8 +107,7 @@ struct RootView: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            licenseState = LicenseStore.state
-        }
+        .environmentObject(purchases)
+        .task { await purchases.start() }
     }
 }

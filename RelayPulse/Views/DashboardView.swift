@@ -33,7 +33,9 @@ struct DashboardView: View {
         NavStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    if fleet.demoMode {
+                    // Mağaza ekran görüntüsü modunda demo şeridi gizlenir; veri
+                    // yine demo (sahte IP/isim), sadece pazarlama görseli temiz olsun.
+                    if fleet.demoMode && !ProcessInfo.processInfo.arguments.contains("-screenshot") {
                         HStack(spacing: 8) {
                             Image(systemName: "eye.fill")
                             Text(DemoFleet.bannerText).font(.footnote.weight(.semibold))
@@ -55,6 +57,33 @@ struct DashboardView: View {
                     .pickerStyle(.segmented)
                     .padding(.vertical, 2)
 
+                    // Bosken CTA: reviewer / yeni kullanici hemen bir demo goruyor.
+                    // Ret gerekcesi 2.1: "bos ekran gorduk, app'i test edemedik".
+                    if fleet.servers.isEmpty && !fleet.demoMode {
+                        VStack(spacing: 14) {
+                            Image(systemName: "server.rack")
+                                .font(.system(size: 44))
+                                .foregroundStyle(Theme.accent(scheme))
+                            Text("No relays yet")
+                                .font(.title3.weight(.semibold))
+                            Text("Add your own Anyone relay from the + button, or explore a sample fleet to see how RelayPulse works.")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.muted(scheme))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                            Button(action: { fleet.demoMode = true }) {
+                                Label("Try Demo Fleet", systemImage: "eye.fill")
+                                    .font(.body.weight(.semibold))
+                                    .padding(.horizontal, 20).padding(.vertical, 12)
+                                    .background(Theme.accent(scheme))
+                                    .foregroundStyle(.white)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 30)
+                    }
                     ForEach(visible) { server in
                         // Destination inline rather than value-based navigation:
                         // NavigationLink(value:) + navigationDestination are iOS 16+.
