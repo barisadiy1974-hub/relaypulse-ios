@@ -33,6 +33,25 @@ packages:
     url: https://github.com/apple/swift-nio-ssh.git
     from: "0.9.0"
 
+# Simulatorde satin almayi denemek icin StoreKit test dosyasi. Sadece Run'a
+# bagli; Archive (Release) gercek App Store urununu kullanir.
+schemes:
+  RelayPulse:
+    build:
+      targets:
+        RelayPulse: all
+    run:
+      config: Debug
+      storeKitConfiguration: RelayPulse.storekit
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
 targets:
   RelayPulse:
     type: application
