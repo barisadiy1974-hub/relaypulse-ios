@@ -59,6 +59,13 @@ final class PurchaseStore: ObservableObject {
         do {
             switch try await product.purchase() {
             case .success(let result):
+                // handle() ignores anything StoreKit could not verify, so an
+                // unverified receipt would otherwise leave the screen with no
+                // unlock and no message — indistinguishable from a hang.
+                guard case .verified = result else {
+                    errorMessage = "The purchase could not be verified. If you were charged, tap Restore Purchase."
+                    break
+                }
                 await handle(result)
             case .userCancelled:
                 break
