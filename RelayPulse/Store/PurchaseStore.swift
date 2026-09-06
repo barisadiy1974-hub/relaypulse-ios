@@ -87,6 +87,10 @@ final class PurchaseStore: ObservableObject {
             if !isEntitled {
                 errorMessage = "No previous RelayPulse Lifetime purchase was found."
             }
+        } catch StoreKitError.userCancelled {
+            // AppStore.sync() always asks the buyer to authenticate. Dismissing
+            // that sheet is a decision, not a failure — and telling an owner
+            // their purchases "could not be restored" reads like they lost them.
         } catch {
             errorMessage = "Purchases could not be restored."
         }
