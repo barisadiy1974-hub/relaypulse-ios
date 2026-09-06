@@ -77,7 +77,9 @@ struct SettingsView: View {
                 } else {
                     LabeledRow("Status", value: "Trial expired")
                 }
-                if let product = purchases.product {
+                // Nothing left to sell once they own it — offering the button
+                // anyway sends an owner into a purchase StoreKit will refuse.
+                if !purchases.isEntitled, let product = purchases.product {
                     Button("Purchase RelayPulse Lifetime (\(product.displayPrice))") {
                         Task { await purchases.purchase() }
                     }
