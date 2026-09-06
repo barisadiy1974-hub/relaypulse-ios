@@ -35,7 +35,7 @@ struct AgentMetrics: Decodable {
 
     var anonLabel: String {
         let state = (anon?.active ?? "").lowercased()
-        if state.isEmpty { return anonHealthy ? "aktif" : "bilinmiyor" }
+        if state.isEmpty { return anonHealthy ? "active" : "unknown" }
         return state
     }
 }
