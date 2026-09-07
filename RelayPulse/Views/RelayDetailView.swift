@@ -77,7 +77,7 @@ struct RelayDetailView: View {
                     ("Host", "\(server.host):\(server.agentPort)"),
                     ("Scheme", server.agentScheme.uppercased()),
                     ("Public IP", status.publicIp ?? "—"),
-                    ("Wallet", server.wallet.isEmpty ? "—" : server.wallet),
+                    ("Payout address", server.wallet.isEmpty ? "—" : server.wallet),
                 ])
             }
             .padding(12)

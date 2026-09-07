@@ -19,9 +19,12 @@ struct MainTabView: View {
                     row("Relays", "antenna.radiowaves.left.and.right",
                         badge: fleet.servers.count) { DashboardView() }
                     row("Overview", "newspaper") { OverviewView() }
-                    row("Wallets", "wallet.bifold") {
-                        WebDashboardView(title: "Wallets", url: Self.dashboard)
-                    }
+                    // No "Wallets" row. It opened dashboard.anyone.io — the same
+                    // URL as the row below it — so it was a second door to one
+                    // page, and the name promised a wallet the app does not
+                    // have: nothing here holds keys, moves funds or reads a
+                    // balance. On iOS a payout address is only stored and
+                    // displayed.
                     row("Anyone Dashboard", "chart.bar.doc.horizontal") {
                         WebDashboardView(title: "Anyone Dashboard", url: Self.dashboard)
                     }

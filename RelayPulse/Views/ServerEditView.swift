@@ -87,7 +87,11 @@ struct ServerEditView: View {
                 }
 
                 Section("Optional") {
-                    LabeledField("Wallet", text: $wallet, placeholder: "0x…")
+                    // "Payout address", not "Wallet": the app stores and shows
+                    // this string and nothing else — no balance, no signing, no
+                    // custody — and the old label described a feature that does
+                    // not exist here.
+                    LabeledField("Payout address", text: $wallet, placeholder: "0x…")
                         .autocorrectionDisabled().textInputAutocapitalization(.never)
                 }
 
