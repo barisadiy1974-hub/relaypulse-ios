@@ -274,6 +274,12 @@ final class FleetStore: ObservableObject {
         }
         // Cap how much SSH fallback this sweep may spend (see SSHMetrics).
         await SSHMetrics.shared.startSweep()
+        // Worked out here, on the main actor, before the task group starts: the
+        // tasks run off-actor and cannot read `statuses`. A relay is "critical"
+        // when one more failure would mark it offline.
+        let critical = Set(targets
+            .filter { (statuses[$0.name]?.fails ?? 0) + 1 >= offlineAfter }
+            .map(\.name))
         await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
             var iterator = targets.makeIterator()
             // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
@@ -281,6 +287,7 @@ final class FleetStore: ObservableObject {
 
             func addNext() {
                 guard let s = iterator.next() else { return }
+                let isCritical = critical.contains(s.name)
                 group.addTask {
                     do { return (s.name, .success(try await AgentClient.shared.fetch(s))) }
                     catch {
@@ -291,7 +298,9 @@ final class FleetStore: ObservableObject {
                         // and that was the whole reason the phone showed yellow for
                         // relays the Mac showed green. Costs an SSH round trip on
                         // roughly one or two relays per sweep.
-                        if let m = await SSHMetrics.shared.fetch(s) { return (s.name, .success(m)) }
+                        if let m = await SSHMetrics.shared.fetch(s, critical: isCritical) {
+                            return (s.name, .success(m))
+                        }
                         return (s.name, .failure(error))
                     }
                 }

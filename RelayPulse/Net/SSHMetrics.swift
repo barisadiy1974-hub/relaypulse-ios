@@ -21,17 +21,37 @@ actor SSHMetrics {
     static let shared = SSHMetrics()
 
     private var budget = 0
+    private var criticalBudget = 0
 
     /// Called once at the start of a sweep. Transient agent losses run ~1% of a
     /// 143-relay fleet, so a handful of attempts covers the real cases; beyond
     /// that the agent is probably down for a reason SSH will not fix either.
-    func startSweep(budget: Int = 5) { self.budget = budget }
+    ///
+    /// `critical` is a separate reserve for relays whose next failure marks them
+    /// offline. Measured 2026-09-07: two relays sat with a wedged agent for four
+    /// days, so they consumed the shared budget on *every* sweep alongside a
+    /// third with a stale token. Once those three plus a little transient noise
+    /// had spent the five attempts, whichever relay came later got no SSH try at
+    /// all and went red — while SSH reached it in about one second and its anon
+    /// service was healthy the whole time. A relay about to be called offline is
+    /// exactly the one worth spending a round trip on, so it no longer queues
+    /// behind first-time hiccups.
+    func startSweep(budget: Int = 5, critical: Int = 8) {
+        self.budget = budget
+        self.criticalBudget = critical
+    }
 
     /// Returns nil when the budget is spent, no SSH key is configured, or the
     /// relay does not answer — callers then keep the agent's original error.
-    func fetch(_ server: Server) async -> AgentMetrics? {
-        guard budget > 0, SSHKeyStore.hasKey else { return nil }
-        budget -= 1
+    func fetch(_ server: Server, critical: Bool = false) async -> AgentMetrics? {
+        guard SSHKeyStore.hasKey else { return nil }
+        if critical, criticalBudget > 0 {
+            criticalBudget -= 1
+        } else if budget > 0 {
+            budget -= 1
+        } else {
+            return nil
+        }
         do {
             let r = try await SSHRunner.shared.run(RelayScripts.metrics, on: server, timeout: 12)
             // The script prints one JSON object; anything else (login banners,
