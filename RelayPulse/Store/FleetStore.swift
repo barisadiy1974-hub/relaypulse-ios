@@ -17,7 +17,27 @@ final class FleetStore: ObservableObject {
         }
     }
 
+    /// How many relays the app watches before it is paid for. The free tier is
+    /// the whole app on a smaller fleet — nothing is switched off, the slice
+    /// being monitored is just shorter. Matches the desktop build.
+    static let freeRelayLimit = 3
+
+    /// Kept in sync from PurchaseStore by RootView; FleetStore has no business
+    /// talking to StoreKit itself.
+    @Published var isEntitled = false
+
+    /// Everything the operator has configured. Always complete: the limit
+    /// applies to what gets polled, never to what they can see or edit, so
+    /// nobody's server list is silently truncated.
     @Published private(set) var servers: [Server] = []
+
+    /// The slice actually monitored. Demo fleets are never capped — the point
+    /// of the demo is to show what a real fleet looks like.
+    var monitoredServers: [Server] {
+        (isEntitled || demoMode) ? servers : Array(servers.prefix(Self.freeRelayLimit))
+    }
+
+    var isRelayLimited: Bool { monitoredServers.count < servers.count }
     @Published private(set) var statuses: [String: RelayStatus] = [:]
     @Published private(set) var isPolling = false
     @Published private(set) var lastSweep: Date?
@@ -46,8 +66,9 @@ final class FleetStore: ObservableObject {
     var totalTxMbps: Double { statuses.values.reduce(0) { $0 + ($1.txMbps ?? 0) } }
 
     var aggregate: (total: Int, online: Int, stale: Int, offline: Int, warn: Int) {
-        var a = (total: servers.count, online: 0, stale: 0, offline: 0, warn: 0)
-        for s in servers {
+        let pool = monitoredServers
+        var a = (total: pool.count, online: 0, stale: 0, offline: 0, warn: 0)
+        for s in pool {
             switch statuses[s.name]?.state ?? .unknown {
             case .online:  a.online += 1
             case .warn:    a.warn += 1
@@ -190,18 +211,19 @@ final class FleetStore: ObservableObject {
     }
 
     func sweep() async {
-        await sweep(servers)
+        await sweep(monitoredServers)
     }
 
     /// iOS arka plan yenilemesi en fazla kisa bir calisma suresi verir. Tum
     /// filoyu yeniden baglamaya calismak yerine her seferinde donusen kucuk bir
     /// grup kontrol edilir; uygulama yeniden one gelince normal tam tur devam eder.
     func refreshInBackground() async {
-        guard !servers.isEmpty else { return }
-        let batchSize = min(10, servers.count)
-        let start = backgroundCursor % servers.count
-        let targets = (0..<batchSize).map { servers[(start + $0) % servers.count] }
-        backgroundCursor = (start + batchSize) % servers.count
+        let pool = monitoredServers
+        guard !pool.isEmpty else { return }
+        let batchSize = min(10, pool.count)
+        let start = backgroundCursor % pool.count
+        let targets = (0..<batchSize).map { pool[(start + $0) % pool.count] }
+        backgroundCursor = (start + batchSize) % pool.count
         await sweep(targets)
     }
 

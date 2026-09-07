@@ -7,13 +7,16 @@ struct DashboardView: View {
     @State private var query = ""
     @State private var filter: RelayFilter = .all
     @State private var showAdd = false
+    @State private var showUnlock = false
 
     enum RelayFilter: String, CaseIterable {
         case all = "All", issues = "Issues", online = "Online"
     }
 
     private var visible: [Server] {
-        fleet.servers.filter { s in
+        // Only the monitored slice: showing a card whose numbers are never
+        // refreshed would read as a broken relay rather than a paywalled one.
+        fleet.monitoredServers.filter { s in
             let st = fleet.status(for: s)
             let q = query.isEmpty
                 || s.name.localizedCaseInsensitiveContains(query)
@@ -46,6 +49,24 @@ struct DashboardView: View {
                         .padding(10)
                         .background(Theme.warn(scheme).opacity(0.15))
                         .foregroundStyle(Theme.warn(scheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    // Say plainly which relays are being watched and which are
+                    // not. Quietly monitoring three of a hundred would look like
+                    // the app had lost the rest.
+                    if fleet.isRelayLimited {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.fill")
+                            Text("Watching \(fleet.monitoredServers.count) of \(fleet.servers.count) relays")
+                                .font(.footnote.weight(.semibold))
+                            Spacer()
+                            Button("Unlock") { showUnlock = true }
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .padding(10)
+                        .background(Theme.accent(scheme).opacity(0.15))
+                        .foregroundStyle(Theme.accent(scheme))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
@@ -120,6 +141,9 @@ struct DashboardView: View {
             .refreshable { await fleet.sweep() }
             .sheet(isPresented: $showAdd) {
                 ServerEditView(mode: .add)
+            }
+            .sheet(isPresented: $showUnlock) {
+                UnlockView()
             }
             .task {
                 fleet.startPolling()

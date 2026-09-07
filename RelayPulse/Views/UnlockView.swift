@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Shown when the 14-day trial has expired and RelayPulse Lifetime has not been purchased.
-struct TrialExpiredView: View {
+/// The paywall, opened from the dashboard notice or from Settings. It explains
+/// what the purchase lifts and closes again -- it is not a gate: the app stays
+/// usable on the free tier whether or not anyone buys.
+struct UnlockView: View {
     @EnvironmentObject private var purchases: PurchaseStore
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
     @State private var busy = false
 
     var body: some View {
@@ -17,10 +20,10 @@ struct TrialExpiredView: View {
                     .foregroundStyle(Theme.accent(scheme))
 
                 VStack(spacing: 8) {
-                    Text("Trial Expired")
+                    Text("Unlock RelayPulse")
                         .font(.title.bold())
                         .foregroundStyle(Theme.text(scheme))
-                    Text("Your 14-day free trial has ended.\nPurchase RelayPulse Lifetime to continue.")
+                    Text("RelayPulse watches up to \(FleetStore.freeRelayLimit) relays for free.\nUnlock it once to monitor your whole fleet.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.muted(scheme))
                         .multilineTextAlignment(.center)
@@ -44,6 +47,9 @@ struct TrialExpiredView: View {
                         Task { busy = true; await purchases.restorePurchases(); busy = false }
                     }
                     .disabled(busy)
+
+                    Button("Continue with \(FleetStore.freeRelayLimit) relays") { dismiss() }
+                        .font(.footnote)
 
                     if let message = purchases.errorMessage {
                         Text(message).font(.caption).foregroundStyle(Theme.err(scheme))

@@ -75,10 +75,8 @@ struct SettingsView: View {
             Section("License") {
                 if purchases.isEntitled {
                     LabeledRow("Status", value: "RelayPulse Lifetime")
-                } else if purchases.trialDaysLeft > 0 {
-                    LabeledRow("Status", value: "\(purchases.trialDaysLeft) day\(purchases.trialDaysLeft == 1 ? "" : "s") left in trial")
                 } else {
-                    LabeledRow("Status", value: "Trial expired")
+                    LabeledRow("Status", value: "Free — up to \(FleetStore.freeRelayLimit) relays")
                 }
                 // Nothing left to sell once they own it — offering the button
                 // anyway sends an owner into a purchase StoreKit will refuse.

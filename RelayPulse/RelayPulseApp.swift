@@ -96,18 +96,20 @@ struct RootView: View {
     @StateObject private var purchases = PurchaseStore()
 
     var body: some View {
+        // No trial countdown and no wall. RelayPulse is free for the first few
+        // relays and the purchase lifts that limit, so there is never a moment
+        // where the app stops working and the operator is locked out of servers
+        // they are still responsible for. Matches the desktop build.
         Group {
-            if !purchases.hasAccess {
-                TrialExpiredView()
+            if fleet.isConfigured {
+                MainTabView()
             } else {
-                if fleet.isConfigured {
-                    MainTabView()
-                } else {
-                    ImportView()
-                }
+                ImportView()
             }
         }
         .environmentObject(purchases)
+        .onAppear { fleet.isEntitled = purchases.isEntitled }
+        .onChange(of: purchases.isEntitled) { fleet.isEntitled = $0 }
         .task { await purchases.start() }
     }
 }
