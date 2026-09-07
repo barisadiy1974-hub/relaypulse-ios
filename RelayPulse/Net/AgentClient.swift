@@ -10,7 +10,12 @@ enum AgentError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badToken:        return "Agent token rejected (403)"
+        // Says what to do, not just what happened. A 403 here is always the same
+        // situation — the relay's agent token was regenerated (a reinstall, or a
+        // fleet exported to this phone before the token changed) and the stored
+        // copy is stale. "Agent token rejected (403)" left operators hunting a
+        // fault on a machine that was working perfectly.
+        case .badToken:        return "Agent token rejected — the relay's token changed; update it in this relay's settings"
         case .http(let c):     return "HTTP \(c)"
         case .timeout:         return "Timed out"
         case .transport(let m): return m

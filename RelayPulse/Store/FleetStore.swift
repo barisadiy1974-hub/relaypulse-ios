@@ -280,7 +280,12 @@ final class FleetStore: ObservableObject {
         let critical = Set(targets
             .filter { (statuses[$0.name]?.fails ?? 0) + 1 >= offlineAfter }
             .map(\.name))
-        await withTaskGroup(of: (String, Result<AgentMetrics, Error>).self) { group in
+        // `tokenStale` rides along so a 403 is still reported even when SSH went
+        // on to fetch the metrics successfully. Without it the fallback quietly
+        // covers for an out-of-date token forever: the card looks perfect, the
+        // operator never learns to fix it, and the day the SSH key is rotated
+        // the relay drops out with no warning.
+        await withTaskGroup(of: (String, Result<AgentMetrics, Error>, Bool).self) { group in
             var iterator = targets.makeIterator()
             // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
             let maxInFlight = 10
@@ -289,8 +294,10 @@ final class FleetStore: ObservableObject {
                 guard let s = iterator.next() else { return }
                 let isCritical = critical.contains(s.name)
                 group.addTask {
-                    do { return (s.name, .success(try await AgentClient.shared.fetch(s))) }
+                    do { return (s.name, .success(try await AgentClient.shared.fetch(s)), false) }
                     catch {
+                        var tokenStale = false
+                        if let e = error as? AgentError, case .badToken = e { tokenStale = true }
                         // Agent unreachable — ask over SSH before calling the relay
                         // down, which is what the desktop app does. Measured
                         // 2026-09-03: ~1% of a 143-host sweep loses its agent reply
@@ -299,16 +306,20 @@ final class FleetStore: ObservableObject {
                         // relays the Mac showed green. Costs an SSH round trip on
                         // roughly one or two relays per sweep.
                         if let m = await SSHMetrics.shared.fetch(s, critical: isCritical) {
-                            return (s.name, .success(m))
+                            return (s.name, .success(m), tokenStale)
                         }
-                        return (s.name, .failure(error))
+                        return (s.name, .failure(error), tokenStale)
                     }
                 }
             }
             for _ in 0..<maxInFlight { addNext() }
-            for await (name, result) in group {
+            for await (name, result, tokenStale) in group {
                 switch result {
-                case .success(let m): recordSuccess(name, m)
+                case .success(let m):
+                    recordSuccess(name, m)
+                    // The readings are real — SSH fetched them — but the token
+                    // still needs fixing, so say so rather than showing green.
+                    if tokenStale { markTokenStale(name) }
                 case .failure(let e): recordFailure(name, e)
                 }
                 addNext()
@@ -369,10 +380,33 @@ final class FleetStore: ObservableObject {
         statuses[r.name] = st
     }
 
+    /// Keeps the metrics SSH just fetched, but flags the out-of-date agent token
+    /// so it gets fixed instead of being silently carried by the fallback.
+    private func markTokenStale(_ name: String) {
+        guard var st = statuses[name] else { return }
+        st.state = .warn
+        st.lastError = AgentError.badToken.errorDescription
+        statuses[name] = st
+    }
+
     private func recordFailure(_ name: String, _ error: Error) {
         var st = statuses[name] ?? RelayStatus(name: name)
-        st.fails += 1
         st.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+
+        // A 403 is not an outage. The agent answered — so the host is up, the
+        // network path is fine, and only the stored token is out of date.
+        // Counting it toward the offline threshold painted a perfectly healthy
+        // relay red and sent the operator debugging a machine that was working;
+        // it also let one mis-configured relay accumulate failures forever.
+        // Warn instead, and hold the counter so it never decays to offline.
+        if let e = error as? AgentError, case .badToken = e {
+            st.state = .warn
+            st.fails = 0
+            statuses[name] = st
+            return
+        }
+
+        st.fails += 1
         // lastUpdated deliberately untouched: it is the last time the relay was
         // actually reached, and the card shows it as "x ago". Stamping it here
         // made a host that had been unreachable for hours read "2s ago" — the
