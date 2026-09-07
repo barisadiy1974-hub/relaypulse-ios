@@ -157,7 +157,10 @@ struct ServerEditView: View {
                 return
             }
         case .edit:
-            fleet.updateServer(s, originalName: originalName ?? s.name)
+            guard fleet.updateServer(s, originalName: originalName ?? s.name) else {
+                error = "A relay with that name already exists."
+                return
+            }
         }
         dismiss()
     }

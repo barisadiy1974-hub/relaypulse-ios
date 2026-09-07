@@ -62,8 +62,12 @@ final class FleetStore: ObservableObject {
 
     var isConfigured: Bool { !servers.isEmpty }
 
-    var totalRxMbps: Double { statuses.values.reduce(0) { $0 + ($1.rxMbps ?? 0) } }
-    var totalTxMbps: Double { statuses.values.reduce(0) { $0 + ($1.txMbps ?? 0) } }
+    // Summed over the monitored slice, not every status. A relay that drops out
+    // of that slice (the free tier keeps the first few by name, so a rename can
+    // shuffle it out) stops being polled but keeps its last reading, and summing
+    // the dictionary kept counting that frozen number as live bandwidth.
+    var totalRxMbps: Double { monitoredServers.reduce(0) { $0 + (statuses[$1.name]?.rxMbps ?? 0) } }
+    var totalTxMbps: Double { monitoredServers.reduce(0) { $0 + (statuses[$1.name]?.txMbps ?? 0) } }
 
     var aggregate: (total: Int, online: Int, stale: Int, offline: Int, warn: Int) {
         let pool = monitoredServers
@@ -106,10 +110,15 @@ final class FleetStore: ObservableObject {
             throw NSError(domain: "RelayPulse", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No servers found in file"])
         }
+        // Importing a real fleet is an unambiguous "done looking around".
+        // Leaving demo on would show the imported relays next to demo statuses
+        // that a ticker keeps overwriting every 5s.
+        if demoMode { demoMode = false }
         apply(export)
     }
 
     func clearConfig() {
+        guard !demoMode else { return }
         timer?.cancel(); timer = nil
         servers = []; statuses = [:]; samples = [:]; lastSweep = nil
         ServerStorage.clear()
@@ -117,7 +126,15 @@ final class FleetStore: ObservableObject {
 
     // MARK: - Add / edit / remove relay
 
+    /// The demo fleet is a display, not a configuration. While it is on,
+    /// `servers` holds sample relays, so any edit that reached storage would
+    /// write those over the operator's real fleet — and deleting the last
+    /// sample relay would call `clearConfig()` and erase it outright. Both are
+    /// silent and permanent, and the demo switch sits on the same screen as the
+    /// relay list, so this is one swipe away. Settings hides those controls in
+    /// demo mode too; this is the backstop.
     private func persistCurrent() {
+        guard !demoMode else { return }
         ServerStorage.save(FleetExport(exportedAt: Date().timeIntervalSince1970,
                                        pollSec: pollSec, offlineAfter: offlineAfter, bridge: bridge,
                                        servers: servers))
@@ -136,16 +153,24 @@ final class FleetStore: ObservableObject {
         return true
     }
 
-    /// Updates an existing relay. `originalName` carries the old record if the name changed.
-    func updateServer(_ s: Server, originalName: String) {
-        guard let idx = servers.firstIndex(where: { $0.name == originalName }) else { return }
+    /// Updates an existing relay. `originalName` carries the old record if the
+    /// name changed. Renaming onto a name already in use is refused: `Server.id`
+    /// is the name, so two records would share an identity — the list renders
+    /// wrong, `removeServer` deletes both, and the other relay's status is
+    /// overwritten by the rename below.
+    @discardableResult
+    func updateServer(_ s: Server, originalName: String) -> Bool {
+        guard !s.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard let idx = servers.firstIndex(where: { $0.name == originalName }) else { return false }
         if s.name != originalName {
+            guard !servers.contains(where: { $0.name == s.name }) else { return false }
             statuses[s.name] = statuses.removeValue(forKey: originalName) ?? RelayStatus(name: s.name)
             samples[s.name] = samples.removeValue(forKey: originalName)
         }
         servers[idx] = s
         servers.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         persistCurrent()
+        return true
     }
 
     func removeServer(named name: String) {
@@ -339,15 +364,25 @@ final class FleetStore: ObservableObject {
         var st = statuses[name] ?? RelayStatus(name: name)
         st.fails += 1
         st.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        st.lastUpdated = Date()
+        // lastUpdated deliberately untouched: it is the last time the relay was
+        // actually reached, and the card shows it as "x ago". Stamping it here
+        // made a host that had been unreachable for hours read "2s ago" — the
+        // failure resetting the very clock that measures how stale the reading is.
         // Red after offlineAfter misses, yellow one miss earlier. A SINGLE missed
         // poll keeps the last good reading and stays green: measured 2026-09-03,
         // ~1% of a 143-host sweep fails transiently while those same hosts answer
         // in ~105ms when probed on their own. Matches the desktop app's threshold.
         let staleAfter = max(1, offlineAfter - 1)
-        st.state = st.fails >= offlineAfter ? .offline
-            : st.fails >= staleAfter ? .stale
-            : .online
+        if st.fails >= offlineAfter {
+            st.state = .offline
+        } else if st.fails >= staleAfter {
+            st.state = .stale
+        }
+        // Below the threshold the state is left alone rather than set to
+        // .online. Writing green there meant a failed poll could *raise* a
+        // relay's status: a warn (anon service down) went green until the next
+        // success, and a brand-new relay with a wrong IP showed green for its
+        // first poll before decaying to yellow and red.
         statuses[name] = st
     }
 }

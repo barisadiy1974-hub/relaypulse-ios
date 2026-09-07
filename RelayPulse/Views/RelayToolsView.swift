@@ -9,6 +9,11 @@ struct RelayToolsView: View {
 
     @State private var running: Int?
     @State private var output: ToolOutput?
+    /// Tapped but not yet confirmed. These run as root on a live relay, and a
+    /// stray tap while scrolling this list would have restarted the anon
+    /// service outright — RelayDetailView already puts the same commands behind
+    /// a confirmation, so this matches it.
+    @State private var pending: FixCommand?
 
     var body: some View {
         List {
@@ -33,7 +38,7 @@ struct RelayToolsView: View {
             Section {
                 ForEach(ai.commands) { c in
                     Button {
-                        run(c)
+                        pending = c
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "terminal").foregroundStyle(Theme.muted(scheme)).frame(width: 24)
@@ -58,6 +63,17 @@ struct RelayToolsView: View {
         .navigationTitle(server.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $output) { o in ToolOutputSheet(output: o) }
+        .confirmationDialog(pending.map { "Run \"\($0.name)\" on \(server.name)?" } ?? "",
+                            isPresented: Binding(get: { pending != nil },
+                                                 set: { if !$0 { pending = nil } }),
+                            titleVisibility: .visible) {
+            if let c = pending {
+                Button("Run as root", role: .destructive) { run(c); pending = nil }
+            }
+            Button("Cancel", role: .cancel) { pending = nil }
+        } message: {
+            if let c = pending { Text(c.command) }
+        }
     }
 
     private func label(_ title: String, _ sub: String, _ icon: String) -> some View {

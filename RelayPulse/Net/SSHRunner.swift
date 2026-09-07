@@ -12,6 +12,7 @@ struct SSHResult {
 
 enum SSHError: LocalizedError {
     case noKey
+    case demo
     case connect(String)
     case auth
     case exec(String)
@@ -19,6 +20,7 @@ enum SSHError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noKey:          return "No SSH key on this phone — add one in Tools › SSH key"
+        case .demo:           return "Sample fleet — turn off Demo data in Settings to run this on a real relay."
         case .connect(let m): return "Could not connect: \(m)"
         case .auth:           return "Authentication refused (is the key in the relay's authorized_keys?)"
         case .exec(let m):    return "Command failed: \(m)"
@@ -33,6 +35,14 @@ actor SSHRunner {
     private let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 
     func run(_ command: String, on server: Server, timeout: TimeInterval = 25) async throws -> SSHResult {
+        // Demo relays carry RFC 5737 documentation addresses that nothing
+        // answers. Six tool screens can reach this, and without the guard each
+        // one fires a real connection and sits for the whole timeout before
+        // failing — the demo fleet is exactly what a first-time user and App
+        // Review tap through, so it has to answer at once and say why.
+        // UserDefaults rather than FleetStore: same key FleetStore reads and
+        // writes, and it keeps the SSH layer from reaching into the UI store.
+        guard !UserDefaults.standard.bool(forKey: "demoMode") else { throw SSHError.demo }
         let pem = Keychain.get("sshPrivateKey")
         guard !pem.isEmpty else { throw SSHError.noKey }
         let key = try OpenSSHKey.ed25519(fromPEM: pem)
@@ -100,7 +110,7 @@ actor SSHRunner {
             throw SSHError.exec(error.localizedDescription)
         }
 
-        return await collector.result()
+        return collector.result()
     }
 }
 
@@ -140,18 +150,28 @@ private final class PrivateKeyAuth: NIOSSHClientUserAuthenticationDelegate {
 
 // MARK: - Command channel
 
-private actor OutputCollector {
+/// A lock, not an actor. `channelRead` fires once per chunk on the channel's
+/// event loop; hopping each chunk onto an actor with its own `Task` gives up
+/// both ordering and timing. Separate tasks are not FIFO, so a large reply
+/// (`journalctl`, an anonrc) could be reassembled with its chunks swapped, and
+/// `result()` runs as soon as the channel closes — while those tasks may still
+/// be queued, silently truncating the output. Appending under a lock keeps the
+/// event loop's own order and finishes before the read.
+private final class OutputCollector: @unchecked Sendable {
+    private let lock = NSLock()
     private var out = Data()
     private var err = Data()
     private var status: Int32?
 
-    func appendOut(_ d: Data) { out.append(d) }
-    func appendErr(_ d: Data) { err.append(d) }
-    func setStatus(_ s: Int32) { status = s }
+    func appendOut(_ d: Data) { lock.lock(); out.append(d); lock.unlock() }
+    func appendErr(_ d: Data) { lock.lock(); err.append(d); lock.unlock() }
+    func setStatus(_ s: Int32) { lock.lock(); status = s; lock.unlock() }
     func result() -> SSHResult {
-        SSHResult(stdout: String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
-                  stderr: String(decoding: err, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
-                  exitStatus: status)
+        lock.lock()
+        defer { lock.unlock() }
+        return SSHResult(stdout: String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
+                         stderr: String(decoding: err, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
+                         exitStatus: status)
     }
 }
 
@@ -182,15 +202,12 @@ private final class SSHCommandHandler: ChannelInboundHandler {
         let payload = unwrapInboundIn(data)
         guard case .byteBuffer(let buf) = payload.data else { return }
         let bytes = Data(buf.readableBytesView)
-        let isStderr = payload.type == .stdErr
-        Task { [collector] in
-            if isStderr { await collector.appendErr(bytes) } else { await collector.appendOut(bytes) }
-        }
+        if payload.type == .stdErr { collector.appendErr(bytes) } else { collector.appendOut(bytes) }
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let status = event as? SSHChannelRequestEvent.ExitStatus {
-            Task { [collector] in await collector.setStatus(Int32(status.exitStatus)) }
+            collector.setStatus(Int32(status.exitStatus))
         }
         context.fireUserInboundEventTriggered(event)
     }

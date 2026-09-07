@@ -60,6 +60,13 @@ struct UnlockView: View {
                 Spacer()
             }
         }
+        // Close once the purchase lands. Without this the paywall stayed up with
+        // its Purchase button still live after a successful buy, which is what
+        // made the Mac flow look like it had silently failed. Single-parameter
+        // onChange: the (old, new) form is iOS 17+.
+        .onChange(of: purchases.isEntitled) { entitled in
+            if entitled { dismiss() }
+        }
     }
 
 }

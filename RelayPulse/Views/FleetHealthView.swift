@@ -6,8 +6,11 @@ struct FleetHealthView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
 
+    /// The monitored slice only, same as the Relays tab and the summary card
+    /// above. Listing an unpolled relay here would rank it by a reading that
+    /// stopped updating.
     private var rows: [(Server, RelayStatus)] {
-        fleet.servers.map { ($0, fleet.status(for: $0)) }
+        fleet.monitoredServers.map { ($0, fleet.status(for: $0)) }
     }
 
     /// Needs attention: offline → warning → stale, worst first.

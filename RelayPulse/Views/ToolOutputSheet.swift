@@ -16,13 +16,20 @@ struct ToolOutputSheet: View {
 
     var body: some View {
         NavStack {
-            ScrollView([.horizontal, .vertical]) {
-                Text(output.text)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(output.failed ? Theme.err(scheme) : Theme.text(scheme))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+            // Vertical scroll wrapping a horizontal one, rather than a single
+            // two-axis ScrollView: a two-axis scroll view centres content that
+            // is smaller than its viewport, which left short output — an error
+            // line especially — floating in the middle of an empty sheet and
+            // running off the right edge. Nesting pins it to the top-left while
+            // still letting wide terminal output scroll sideways.
+            ScrollView(.vertical) {
+                ScrollView(.horizontal) {
+                    Text(output.text)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(output.failed ? Theme.err(scheme) : Theme.text(scheme))
+                        .textSelection(.enabled)
+                        .padding(12)
+                }
             }
             .background(Theme.bg(scheme))
             .navigationTitle(output.title)
