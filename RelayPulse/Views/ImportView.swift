@@ -46,6 +46,25 @@ struct ImportView: View {
 
                     Button("Paste JSON") { showPaste = true }
                         .font(.footnote)
+
+                    // Without this the demo fleet is unreachable on a fresh
+                    // install: the only other way in is Settings, and Settings
+                    // lives behind MainTabView, which needs a server already
+                    // configured. Someone with no relays yet -- App Review
+                    // included -- would have nothing to look at.
+                    Button {
+                        fleet.demoMode = true
+                    } label: {
+                        Label("Try Demo Fleet", systemImage: "eye.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 8)
+
+                    Text("Fills the app with a sample fleet so you can look around before adding your own relays.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted(scheme))
+                        .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 36)
 

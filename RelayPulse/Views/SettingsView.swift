@@ -24,7 +24,10 @@ struct SettingsView: View {
                             Circle().fill(fleet.status(for: s).state.color(scheme)).frame(width: 8, height: 8)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(s.name).foregroundStyle(Theme.text(scheme))
-                                Text("\(s.host):\(s.agentPort)").font(.caption).foregroundStyle(Theme.muted(scheme))
+                                // String(), not interpolation: Text formats a bare
+                                // Int for the locale, so port 19191 renders as
+                                // "19 191" in Norwegian and "19.191" in German.
+                                Text("\(s.host):\(String(s.agentPort))").font(.caption).foregroundStyle(Theme.muted(scheme))
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
