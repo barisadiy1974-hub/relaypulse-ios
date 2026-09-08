@@ -46,6 +46,7 @@ struct FleetHealthView: View {
         NavStack {
             ScrollView {
                 LazyVStack(spacing: 10) {
+                    DemoBanner()
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
 
                     PanelCard {

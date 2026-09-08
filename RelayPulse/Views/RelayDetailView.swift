@@ -17,6 +17,7 @@ struct RelayDetailView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
+                DemoBanner()
                 PanelCard(stateColor: sc) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {

@@ -36,22 +36,7 @@ struct DashboardView: View {
         NavStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    // Demo data is always labelled as demo. There is no launch
-                    // flag, build setting or gesture that suppresses this banner:
-                    // if the numbers on screen are fabricated, the screen says so.
-                    if fleet.demoMode {
-                        HStack(spacing: 8) {
-                            Image(systemName: "eye.fill")
-                            Text(DemoFleet.bannerText).font(.footnote.weight(.semibold))
-                            Spacer()
-                            Button("Turn off") { fleet.demoMode = false }
-                                .font(.footnote.weight(.semibold))
-                        }
-                        .padding(10)
-                        .background(Theme.warn(scheme).opacity(0.15))
-                        .foregroundStyle(Theme.warn(scheme))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
+                    DemoBanner(showsTurnOff: true)
 
                     // Say plainly which relays are being watched and which are
                     // not. Quietly monitoring three of a hundred would look like
@@ -195,5 +180,36 @@ struct FleetSummaryCard: View {
         .padding(.vertical, 8)
         .background(color.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// Says, on every screen that shows it, that the numbers are fabricated.
+///
+/// There is deliberately no way to suppress this: no launch argument, no build
+/// setting, no hidden gesture. An earlier version hid it when the app was
+/// launched with `-screenshot` so that App Store images would look tidy, which
+/// meant the store showed invented relays with no indication that they were
+/// invented. App Review flagged that under guideline 5.6 and they were right.
+struct DemoBanner: View {
+    @EnvironmentObject var fleet: FleetStore
+    @Environment(\.colorScheme) private var scheme
+    var showsTurnOff = false
+
+    var body: some View {
+        if fleet.demoMode {
+            HStack(spacing: 8) {
+                Image(systemName: "eye.fill")
+                Text(DemoFleet.bannerText).font(.footnote.weight(.semibold))
+                Spacer()
+                if showsTurnOff {
+                    Button("Turn off") { fleet.demoMode = false }
+                        .font(.footnote.weight(.semibold))
+                }
+            }
+            .padding(10)
+            .background(Theme.warn(scheme).opacity(0.15))
+            .foregroundStyle(Theme.warn(scheme))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
 }
