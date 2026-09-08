@@ -22,6 +22,7 @@ actor SSHMetrics {
 
     private var budget = 0
     private var criticalBudget = 0
+    private var repairBudget = 0
 
     /// Called once at the start of a sweep. Transient agent losses run ~1% of a
     /// 143-relay fleet, so a handful of attempts covers the real cases; beyond
@@ -36,9 +37,29 @@ actor SSHMetrics {
     /// service was healthy the whole time. A relay about to be called offline is
     /// exactly the one worth spending a round trip on, so it no longer queues
     /// behind first-time hiccups.
-    func startSweep(budget: Int = 5, critical: Int = 8) {
+    func startSweep(budget: Int = 5, critical: Int = 8, repair: Int = 8) {
         self.budget = budget
         self.criticalBudget = critical
+        self.repairBudget = repair
+    }
+
+    /// Reads the relay's real agent token over SSH so a drifted copy can be
+    /// repaired without the operator doing anything.
+    ///
+    /// Budgeted separately: a relay whose token cannot be repaired would
+    /// otherwise be SSH'd on every sweep forever. A successful repair is
+    /// self-limiting — once the stored token matches, the 403 stops.
+    func repairToken(_ server: Server) async -> String? {
+        guard repairBudget > 0, SSHKeyStore.hasKey else { return nil }
+        repairBudget -= 1
+        guard let r = try? await SSHRunner.shared.run(RelayScripts.readAgentToken,
+                                                     on: server, timeout: 12) else { return nil }
+        let token = r.stdout
+            .split(separator: "\n")
+            .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
+            .trimmingCharacters(in: .whitespaces)
+        guard let token, !token.isEmpty, token != server.agentToken else { return nil }
+        return token
     }
 
     /// Returns nil when the budget is spent, no SSH key is configured, or the

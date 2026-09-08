@@ -180,6 +180,18 @@ enum RelayScripts {
     PYEOF
     """#
 
+    /// Reads the agent's real token out of its systemd unit.
+    ///
+    /// The token lives in two places — the relay's unit file and this app's copy —
+    /// so they can drift apart: rebuilding a relay regenerates it, and a fleet
+    /// exported to the phone is a snapshot that ages. When they drift the agent
+    /// answers 403 and a healthy relay looks broken. Desktop RelayPulse has
+    /// repaired itself from this since the beginning (`monitor.js`
+    /// `_fetchRemoteAgentToken`); this is the same command, so the two apps
+    /// recover the same way.
+    static let readAgentToken =
+        "grep -oP '(?<=AGENT_TOKEN=)\\S+' /etc/systemd/system/anyone-agent.service 2>/dev/null || true"
+
     /// Locates the live anonrc and prints `PATH=<path>` then `---` then the contents.
     static let readAnonrc = #"""
     for p in /etc/anon/anonrc /etc/anon/anonrc-* /etc/anon/instances/*/anonrc /usr/local/etc/anon/anonrc /etc/tor/torrc; do

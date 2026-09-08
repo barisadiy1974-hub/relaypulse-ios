@@ -45,6 +45,16 @@ final class FleetStore: ObservableObject {
     @Published var offlineAfter: Int = 3
     @Published private(set) var bridge: MacBridge?
 
+    /// One relay's result from a sweep, plus what the sweep learned on the way:
+    /// a token read back off the relay after a 403, and whether a token problem
+    /// is still outstanding.
+    private struct SweepOutcome {
+        let name: String
+        let result: Result<AgentMetrics, Error>
+        var repairedToken: String? = nil
+        var tokenStale: Bool = false
+    }
+
     /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
     private struct Sample { var rx: Double; var tx: Double; var cpuIdle: Double; var cpuTotal: Double; var at: Date }
     private var samples: [String: Sample] = [:]
@@ -280,12 +290,13 @@ final class FleetStore: ObservableObject {
         let critical = Set(targets
             .filter { (statuses[$0.name]?.fails ?? 0) + 1 >= offlineAfter }
             .map(\.name))
-        // `tokenStale` rides along so a 403 is still reported even when SSH went
-        // on to fetch the metrics successfully. Without it the fallback quietly
-        // covers for an out-of-date token forever: the card looks perfect, the
-        // operator never learns to fix it, and the day the SSH key is rotated
-        // the relay drops out with no warning.
-        await withTaskGroup(of: (String, Result<AgentMetrics, Error>, Bool).self) { group in
+        // On a 403 the token is repaired over SSH and the fetch retried, the way
+        // desktop RelayPulse has always done it (monitor.js). `repairedToken`
+        // carries the new value back so it can be stored; `tokenStale` marks the
+        // relays that could not be repaired, so the SSH fallback does not
+        // quietly cover for a dead token forever — the card would look perfect
+        // and the relay would vanish the day the SSH key changed.
+        await withTaskGroup(of: SweepOutcome.self) { group in
             var iterator = targets.makeIterator()
             // Simultaneous TLS handshakes to 143 hosts caused transient errors — window of 10.
             let maxInFlight = 10
@@ -294,10 +305,25 @@ final class FleetStore: ObservableObject {
                 guard let s = iterator.next() else { return }
                 let isCritical = critical.contains(s.name)
                 group.addTask {
-                    do { return (s.name, .success(try await AgentClient.shared.fetch(s)), false) }
+                    do { return SweepOutcome(name: s.name, result: .success(try await AgentClient.shared.fetch(s))) }
                     catch {
                         var tokenStale = false
-                        if let e = error as? AgentError, case .badToken = e { tokenStale = true }
+                        if let e = error as? AgentError, case .badToken = e {
+                            tokenStale = true
+                            // Read the relay's real token and try again with it.
+                            // The token drifts for ordinary reasons — rebuilding a
+                            // relay regenerates it, and a fleet exported to this
+                            // phone is a snapshot that ages — so healing beats
+                            // asking the operator to go and find the new value.
+                            if let fixed = await SSHMetrics.shared.repairToken(s) {
+                                var repaired = s
+                                repaired.agentToken = fixed
+                                if let m = try? await AgentClient.shared.fetch(repaired) {
+                                    return SweepOutcome(name: s.name, result: .success(m),
+                                                        repairedToken: fixed)
+                                }
+                            }
+                        }
                         // Agent unreachable — ask over SSH before calling the relay
                         // down, which is what the desktop app does. Measured
                         // 2026-09-03: ~1% of a 143-host sweep loses its agent reply
@@ -306,21 +332,25 @@ final class FleetStore: ObservableObject {
                         // relays the Mac showed green. Costs an SSH round trip on
                         // roughly one or two relays per sweep.
                         if let m = await SSHMetrics.shared.fetch(s, critical: isCritical) {
-                            return (s.name, .success(m), tokenStale)
+                            return SweepOutcome(name: s.name, result: .success(m), tokenStale: tokenStale)
                         }
-                        return (s.name, .failure(error), tokenStale)
+                        return SweepOutcome(name: s.name, result: .failure(error), tokenStale: tokenStale)
                     }
                 }
             }
             for _ in 0..<maxInFlight { addNext() }
-            for await (name, result, tokenStale) in group {
-                switch result {
+            for await outcome in group {
+                // Store a repaired token first, so the next sweep uses it.
+                if let token = outcome.repairedToken { applyRepairedToken(outcome.name, token) }
+                switch outcome.result {
                 case .success(let m):
-                    recordSuccess(name, m)
-                    // The readings are real — SSH fetched them — but the token
-                    // still needs fixing, so say so rather than showing green.
-                    if tokenStale { markTokenStale(name) }
-                case .failure(let e): recordFailure(name, e)
+                    recordSuccess(outcome.name, m)
+                    // Readings are real — SSH fetched them — but the token could
+                    // not be repaired, so say so rather than showing green.
+                    if outcome.tokenStale && outcome.repairedToken == nil {
+                        markTokenStale(outcome.name)
+                    }
+                case .failure(let e): recordFailure(outcome.name, e)
                 }
                 addNext()
             }
@@ -378,6 +408,17 @@ final class FleetStore: ObservableObject {
         st.uptime = r.uptimeSec.map { String(format: "%.0fs", $0) }
         st.state = RelayState(rawValue: r.state) ?? (st.anonHealthy ? .online : .warn)
         statuses[r.name] = st
+    }
+
+    /// Stores a token read back off the relay after a 403. Runs on the main
+    /// actor, which is what keeps concurrent repairs from overwriting each
+    /// other — the desktop needed an explicit save queue for exactly this, since
+    /// several relays can answer 403 in the same sweep.
+    private func applyRepairedToken(_ name: String, _ token: String) {
+        guard let idx = servers.firstIndex(where: { $0.name == name }),
+              servers[idx].agentToken != token else { return }
+        servers[idx].agentToken = token
+        persistCurrent()
     }
 
     /// Keeps the metrics SSH just fetched, but flags the out-of-date agent token
