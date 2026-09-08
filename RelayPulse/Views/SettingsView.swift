@@ -63,7 +63,7 @@ struct SettingsView: View {
                         Label("Try demo fleet", systemImage: "eye.fill")
                     }
                 }
-                Text("Fills the app with a sample fleet so you can look around before adding your own relays. No network connections are made while this is on.")
+                Text("Fills the app with a sample fleet so you can look around before adding your own relays. No relay is contacted while this is on.")
                     .font(.footnote).foregroundStyle(Theme.muted(scheme))
             } header: {
                 Text("Try it out")
