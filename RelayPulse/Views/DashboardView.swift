@@ -36,9 +36,10 @@ struct DashboardView: View {
         NavStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    // Mağaza ekran görüntüsü modunda demo şeridi gizlenir; veri
-                    // yine demo (sahte IP/isim), sadece pazarlama görseli temiz olsun.
-                    if fleet.demoMode && !ProcessInfo.processInfo.arguments.contains("-screenshot") {
+                    // Demo data is always labelled as demo. There is no launch
+                    // flag, build setting or gesture that suppresses this banner:
+                    // if the numbers on screen are fabricated, the screen says so.
+                    if fleet.demoMode {
                         HStack(spacing: 8) {
                             Image(systemName: "eye.fill")
                             Text(DemoFleet.bannerText).font(.footnote.weight(.semibold))

@@ -54,9 +54,6 @@ struct RelayPulseApp: App {
                 .task {
                     SSHKeyStore.importSeedFileIfPresent()
                     ai.importSeedKeyIfPresent()
-                    if ProcessInfo.processInfo.arguments.contains("--ssh-selftest") {
-                        await sshSelfTest()
-                    }
                 }
                 // Single-parameter form: the (old, new) closure is iOS 17+ and the
                 // app supports iOS 15 so an iPhone 7 can run it.
@@ -72,22 +69,6 @@ struct RelayPulseApp: App {
                     }
                 }
         }
-    }
-}
-
-/// Launched with `--ssh-selftest`: SSHs into the first relay and logs the result.
-/// Useful for verifying the SSH path without tapping the UI (simctl launch … --ssh-selftest).
-@MainActor
-private func sshSelfTest() async {
-    guard let s = ServerStorage.load()?.servers.first else {
-        NSLog("SSHSELFTEST: no servers"); return
-    }
-    NSLog("SSHSELFTEST: hasKey=\(SSHKeyStore.hasKey) target=\(s.name) \(s.sshUser)@\(s.host):\(s.sshPort)")
-    do {
-        let r = try await SSHRunner.shared.run("hostname; systemctl is-active anon", on: s, timeout: 25)
-        NSLog("SSHSELFTEST: OK exit=\(r.exitStatus ?? -1) out=\(r.combined.replacingOccurrences(of: "\n", with: " | "))")
-    } catch {
-        NSLog("SSHSELFTEST: ERROR \(error.localizedDescription)")
     }
 }
 
