@@ -130,9 +130,9 @@ struct SettingsView: View {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 do { try fleet.importConfig(from: try Data(contentsOf: url)); error = nil }
-                catch { self.error = error.localizedDescription }
+                catch { self.error = SSHRunner.describe(error) }
             } else if case .failure(let e) = result {
-                error = e.localizedDescription
+                error = SSHRunner.describe(e)
             }
         }
         .confirmationDialog("Remove every relay definition?", isPresented: $showClearConfirm, titleVisibility: .visible) {

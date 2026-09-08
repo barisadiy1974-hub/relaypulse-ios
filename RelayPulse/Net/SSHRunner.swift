@@ -61,11 +61,27 @@ actor SSHRunner {
                 ])
             }
 
+        // One retry, and only on the connect. Measured across a 143-relay fleet
+        // on 2026-09-07/08: eighteen SSH attempts failed to connect during bulk
+        // work and every single one succeeded when tried again a moment later.
+        // The agent path has retried transient failures for a while
+        // (AgentClient); SSH had one shot, so a relay could be called stale or
+        // offline over a hiccup that a second attempt would have cleared.
+        //
+        // Deliberately NOT retried: authentication (repeating a bad key is what
+        // gets an address banned by fail2ban) and anything after the connection
+        // is up, since the command may already have run — these are used for
+        // fix commands, not only for reads.
         let channel: Channel
         do {
-            channel = try await bootstrap.connect(host: server.host, port: server.sshPort).get()
+            channel = try await connect(bootstrap, to: server)
         } catch {
-            throw SSHError.connect(error.localizedDescription)
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            do {
+                channel = try await connect(bootstrap, to: server)
+            } catch {
+                throw SSHError.connect(Self.describe(error))
+            }
         }
         // Fire-and-forget close. `channel.close().wait()` BLOCKS the calling
         // thread, and these run on Swift concurrency's cooperative pool, which
@@ -107,10 +123,29 @@ actor SSHRunner {
         } catch {
             let m = String(describing: error)
             if m.localizedCaseInsensitiveContains("authentication") { throw SSHError.auth }
-            throw SSHError.exec(error.localizedDescription)
+            throw SSHError.exec(Self.describe(error))
         }
 
         return collector.result()
+    }
+
+    private func connect(_ bootstrap: ClientBootstrap, to server: Server) async throws -> Channel {
+        try await bootstrap.connect(host: server.host, port: server.sshPort).get()
+    }
+
+    /// A description that is English wherever the phone is.
+    ///
+    /// `localizedDescription` hands back Foundation's translation of the system
+    /// error, so a Turkish phone logged "İşlem tamamlanamadı" and a German one
+    /// would log its own. The rest of the app is English everywhere — which is
+    /// what the App Store listing and the review notes both state — so a
+    /// translated string leaking out of the network layer breaks that promise
+    /// and makes the activity log useless to anyone reading it later.
+    static func describe(_ error: Error) -> String {
+        let raw = String(describing: error)
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return raw.count > 160 ? String(raw.prefix(160)) + "…" : raw
     }
 }
 

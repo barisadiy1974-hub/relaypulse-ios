@@ -77,9 +77,11 @@ final class AgentClient: NSObject, URLSessionDelegate {
             (data, resp) = try await session.data(for: req)
         } catch let e as URLError {
             if e.code == .timedOut { throw AgentError.timeout }
-            throw AgentError.transport(e.localizedDescription)
+            // Not localizedDescription: Foundation translates it into the
+            // phone's language, and the app is English everywhere else.
+            throw AgentError.transport(SSHRunner.describe(e))
         } catch {
-            throw AgentError.transport(error.localizedDescription)
+            throw AgentError.transport(SSHRunner.describe(error))
         }
 
         if let http = resp as? HTTPURLResponse {
@@ -90,7 +92,7 @@ final class AgentClient: NSObject, URLSessionDelegate {
         do {
             return try JSONDecoder().decode(AgentMetrics.self, from: data)
         } catch {
-            throw AgentError.decode(error.localizedDescription)
+            throw AgentError.decode(SSHRunner.describe(error))
         }
     }
 

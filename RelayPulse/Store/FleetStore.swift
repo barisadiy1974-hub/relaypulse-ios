@@ -432,7 +432,9 @@ final class FleetStore: ObservableObject {
 
     private func recordFailure(_ name: String, _ error: Error) {
         var st = statuses[name] ?? RelayStatus(name: name)
-        st.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        // Our own errors carry English text; anything else is described rather
+        // than localized, so the card never shows a translated system string.
+        st.lastError = (error as? LocalizedError)?.errorDescription ?? SSHRunner.describe(error)
 
         // A 403 is not an outage. The agent answered — so the host is up, the
         // network path is fine, and only the stored token is out of date.
