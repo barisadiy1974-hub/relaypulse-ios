@@ -15,3 +15,9 @@ RelayPulse.xcodeproj/
 # Filo export dosyaları (token içerir — repoya girmez)
 *fleet*.json
 relaypulse-servers.json
+
+# Yerel App Store Connect kimlik bilgileri ve ortam ayarları
+*.p8
+.env
+.env.*
+!.env.example
