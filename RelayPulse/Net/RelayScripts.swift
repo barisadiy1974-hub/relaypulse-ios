@@ -1,5 +1,34 @@
 import Foundation
 
+/// Which service counts as "the thing that should be running".
+///
+/// Machine health — reachability, CPU, memory, disk, network, uptime — is read
+/// the same way on every Linux box. Only the service check needs a name, and
+/// that name belongs to the operator, not to this app. The defaults match what
+/// the app used to hard-code, so existing setups behave identically.
+enum WatchTargets {
+    static let defaultServices = ["anon", "anon@default", "anyone", "anyone-relay", "tor-anon"]
+    static let defaultPorts = [9001, 9030, 9050, 9051]
+
+    /// Names come from the operator, so only characters valid in a systemd unit
+    /// name survive. Everything here is pasted into a remote shell command.
+    static var services: [String] {
+        let stored = (UserDefaults.standard.stringArray(forKey: "watchServices") ?? [])
+            .filter { $0.range(of: "^[A-Za-z0-9@._-]+$", options: .regularExpression) != nil }
+        return stored.isEmpty ? defaultServices : stored
+    }
+
+    static var ports: [Int] {
+        let stored = (UserDefaults.standard.array(forKey: "watchPorts") as? [Int] ?? [])
+            .filter { $0 > 0 && $0 < 65536 }
+        return stored.isEmpty ? defaultPorts : stored
+    }
+
+    static var servicesString: String { services.joined(separator: " ") }
+    static var portsString: String { ports.map(String.init).joined(separator: " ") }
+}
+
+
 /// Shell / Python snippets executed on the relay over SSH.
 /// Swift raw strings (`#"""`) so backslashes and quotes pass through untouched.
 enum RelayScripts {
@@ -149,7 +178,19 @@ enum RelayScripts {
     echo; echo "=== DISK ==="; df -h / /var 2>/dev/null
     """#
 
-    static let log = "journalctl -u anon -n 60 --no-pager 2>/dev/null || journalctl -u 'anon@*' -n 60 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 60 --no-pager 2>/dev/null || echo '(no log found)'"
+    /// Tries each watched unit in turn, plus its instance glob, and prints the
+    /// first log it finds.
+    static var log: String {
+        var parts: [String] = []
+        for svc in WatchTargets.services {
+            parts.append("journalctl -u \(svc) -n 60 --no-pager 2>/dev/null")
+            if !svc.contains("@") {
+                parts.append("journalctl -u '\(svc)@*' -n 60 --no-pager 2>/dev/null")
+            }
+        }
+        parts.append("echo '(no log found)'")
+        return parts.joined(separator: " || ")
+    }
 
     static let https = #"""
     echo "=== AGENT (:19191) ==="
@@ -171,14 +212,21 @@ enum RelayScripts {
     /// to SSH when the agent is unreachable (monitor.js), so a relay whose agent
     /// hiccups but whose SSH is fine stays green there. Without this the phone
     /// had only one measurement path and showed yellow for the same relay.
-    static let metrics = #"""
-    python3 - <<'PYEOF'
-    import sys, json
-    sys.path.insert(0, "/opt/anyone-agent")
-    import agent
-    print(json.dumps(agent.collect()))
-    PYEOF
-    """#
+    /// Reads metrics through the agent module on the server. The watched service
+    /// names are handed to it in the environment, so the same agent works for a
+    /// relay, a database, a home server or anything else with a systemd unit.
+    static var metrics: String {
+        """
+        python3 - <<'PYEOF'
+        import sys, json, os
+        os.environ['AGENT_SERVICES'] = '\(WatchTargets.servicesString)'
+        os.environ['AGENT_PORTS'] = '\(WatchTargets.portsString)'
+        sys.path.insert(0, "/opt/anyone-agent")
+        import agent
+        print(json.dumps(agent.collect()))
+        PYEOF
+        """
+    }
 
     /// Reads the agent's real token out of its systemd unit.
     ///

@@ -8,6 +8,29 @@ struct SettingsView: View {
     @State private var showAdd = false
     @State private var editing: Server?
     @State private var showClearConfirm = false
+    @State private var watchServicesText = WatchTargets.servicesString
+    @State private var watchPortsText = WatchTargets.portsString
+
+    private var watchTargetsEdited: Bool {
+        watchServicesText != WatchTargets.servicesString || watchPortsText != WatchTargets.portsString
+    }
+
+    /// Empty means "use the defaults", so a cleared field restores them rather
+    /// than leaving the app watching nothing.
+    private func saveWatchTargets() {
+        let svcs = watchServicesText
+            .split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" })
+            .map(String.init)
+            .filter { $0.range(of: "^[A-Za-z0-9@._-]+$", options: .regularExpression) != nil }
+        let ports = watchPortsText
+            .split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" })
+            .compactMap { Int($0) }
+            .filter { $0 > 0 && $0 < 65536 }
+        UserDefaults.standard.set(svcs, forKey: "watchServices")
+        UserDefaults.standard.set(ports, forKey: "watchPorts")
+        watchServicesText = WatchTargets.servicesString
+        watchPortsText = WatchTargets.portsString
+    }
     @State private var error: String?
     @EnvironmentObject private var purchases: PurchaseStore
 
@@ -105,6 +128,21 @@ struct SettingsView: View {
                 if let message = purchases.errorMessage {
                     Text(message).font(.caption).foregroundStyle(Theme.err(scheme))
                 }
+            }
+
+            Section {
+                TextField("nginx postgresql docker", text: $watchServicesText)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                TextField("80 443", text: $watchPortsText)
+                    .autocorrectionDisabled()
+                    .keyboardType(.numbersAndPunctuation)
+                Button("Save") { saveWatchTargets() }
+                    .disabled(!watchTargetsEdited)
+            } header: {
+                Text("What counts as \"up\"")
+            } footer: {
+                Text("Machine health — reachability, CPU, memory, disk, network, uptime — is read the same way on every Linux server. This is only about which service to check with systemctl is-active. Separate names with spaces; the first one that is not inactive wins. Instances (name@something) are found automatically. If no name matches, a machine listening on one of these ports still counts as up. Leave empty for the defaults.")
             }
 
             Section {
