@@ -40,6 +40,7 @@ schemes:
     build:
       targets:
         RelayPulse: all
+        RelayPulseWidget: all
     run:
       config: Debug
       storeKitConfiguration: RelayPulse.storekit
@@ -59,8 +60,10 @@ targets:
     dependencies:
       - package: swift-nio-ssh
         product: NIOSSH
+      - target: RelayPulseWidget
     sources:
       - path: RelayPulse
+      - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.baris.relaypulse
@@ -79,3 +82,20 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: RelayPulse AppStore Distribution
           CODE_SIGN_IDENTITY: "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
+
+  RelayPulseWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: RelayPulseWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.baris.relaypulse.widget
+        PRODUCT_NAME: RelayPulseWidget
+        INFOPLIST_FILE: RelayPulseWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: RelayPulseWidget/RelayPulseWidget.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"

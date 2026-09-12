@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WidgetKit
 
 @MainActor
 final class FleetStore: ObservableObject {
@@ -38,7 +39,7 @@ final class FleetStore: ObservableObject {
     }
 
     var isRelayLimited: Bool { monitoredServers.count < servers.count }
-    @Published private(set) var statuses: [String: RelayStatus] = [:]
+    @Published private(set) var statuses: [String: RelayStatus] = [:] { didSet { publishWidgetSummary() } }
     @Published private(set) var isPolling = false
     @Published private(set) var lastSweep: Date?
     @Published var pollSec: Int = 120
@@ -92,6 +93,30 @@ final class FleetStore: ObservableObject {
             }
         }
         return a
+    }
+
+    private var lastWidgetCounts: [Int] = []
+
+    /// Widget'in okudugu ozet; sayilar degistiginde App Group'a yazilir.
+    /// Tur sonunu beklemek widget'i dakikalarca geride birakiyordu.
+    private func publishWidgetSummary() {
+        let a = aggregate
+        let counts = [a.total, a.online, a.warn, a.stale, a.offline]
+        guard counts != lastWidgetCounts else { return }
+        lastWidgetCounts = counts
+        var s = FleetSummary(total: a.total, online: a.online, warn: a.warn, stale: a.stale, offline: a.offline)
+        let worst = monitoredServers.compactMap { statuses[$0.name] }
+            .filter { $0.state == .offline || $0.state == .warn }
+            .sorted { ($0.state == .offline ? 1 : 0, $0.fails) > ($1.state == .offline ? 1 : 0, $1.fails) }
+            .first
+        if let w = worst {
+            s.worstName = w.name
+            s.worstError = w.state == .offline ? "SSH yok" : w.anonLabel
+            s.worstSince = w.lastUpdated
+        }
+        s.history = Array(((FleetSummary.load()?.history ?? []) + [a.online]).suffix(48))
+        s.save()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     func status(for server: Server) -> RelayStatus {

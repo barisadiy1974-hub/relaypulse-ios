@@ -82,6 +82,11 @@ final class PurchaseStore: ObservableObject {
     }
 
     private func refreshEntitlement() async {
+        #if DEBUG
+        // Gelistirici derlemesi magaza makbuzu tasimaz; kendi telefonda tam filo icin.
+        isEntitled = true
+        return
+        #endif
         var entitled = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
