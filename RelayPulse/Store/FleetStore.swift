@@ -40,9 +40,9 @@ final class FleetStore: ObservableObject {
     }
 
     var isRelayLimited: Bool { monitoredServers.count < servers.count }
-    @Published private(set) var statuses: [String: RelayStatus] = [:] { didSet { publishWidgetSummary() } }
+    @Published private(set) var statuses: [String: RelayStatus] = [:] { didSet { publishWidgetSummary(sweepDone: false) } }
     @Published private(set) var isPolling = false
-    @Published private(set) var lastSweep: Date?
+    @Published private(set) var lastSweep: Date? { didSet { publishWidgetSummary(sweepDone: true) } }
     @Published var pollSec: Int = 120
     @Published var offlineAfter: Int = 3
     @Published private(set) var bridge: MacBridge?
@@ -97,28 +97,33 @@ final class FleetStore: ObservableObject {
     }
 
     private var lastWidgetCounts: [Int] = []
-    private var widgetPublishTask: Task<Void, Never>?
 
-    /// Widget'in okudugu ozet; sayilar degistiginde App Group'a yazilir.
-    /// Tur sonunu beklemek widget'i dakikalarca geride birakiyordu; her
-    /// degisimde tazelemek ise tur boyunca 143 reload uretip iOS butcesini
-    /// bitiriyordu (widget ara degerde takili kaldi). 3 sn debounce ikisini cozer.
-    private func publishWidgetSummary() {
-        widgetPublishTask?.cancel()
-        widgetPublishTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled else { return }
-            writeWidgetSummary()
+    /// Widget'in okudugu ozet. Relay basina son bilinen durum plist'te tutulur:
+    /// app arka plana alininca tur yarim kaliyor ve arka plan turu 10 relay
+    /// sorguluyor; sorgulanmayanlar `.unknown` kalip sayimi dusuruyordu
+    /// (143 filoda 139-141 gorundu). Sayilar degisince hemen yazilir; egriye
+    /// nokta yalniz tur sonunda eklenir ki tirmanis kaydedilmesin.
+    private func publishWidgetSummary(sweepDone: Bool) {
+        let prev = FleetSummary.load()
+        let pool = monitoredServers
+        var states = (prev?.states ?? [:]).filter { st in pool.contains { $0.name == st.key } }
+        for srv in pool {
+            if let st = statuses[srv.name], st.state != .unknown { states[srv.name] = st.state.rawValue }
         }
-    }
-
-    private func writeWidgetSummary() {
-        let a = aggregate
-        let counts = [a.total, a.online, a.warn, a.stale, a.offline]
-        guard counts != lastWidgetCounts else { return }
+        var s = FleetSummary(total: pool.count)
+        for v in states.values {
+            switch RelayState(rawValue: v) {
+            case .online:  s.online += 1
+            case .warn:    s.warn += 1
+            case .stale:   s.stale += 1
+            case .offline: s.offline += 1
+            default: break
+            }
+        }
+        let counts = [s.total, s.online, s.warn, s.stale, s.offline]
+        guard sweepDone || counts != lastWidgetCounts else { return }
         lastWidgetCounts = counts
-        var s = FleetSummary(total: a.total, online: a.online, warn: a.warn, stale: a.stale, offline: a.offline)
-        let worst = monitoredServers.compactMap { statuses[$0.name] }
+        let worst = pool.compactMap { statuses[$0.name] }
             .filter { $0.state == .offline || $0.state == .warn }
             .sorted { ($0.state == .offline ? 1 : 0, $0.fails) > ($1.state == .offline ? 1 : 0, $1.fails) }
             .first
@@ -126,8 +131,12 @@ final class FleetStore: ObservableObject {
             s.worstName = w.name
             s.worstError = w.state == .offline ? "SSH yok" : w.anonLabel
             s.worstSince = w.lastUpdated
+        } else if let n = states.first(where: { $0.value == RelayState.offline.rawValue })?.key {
+            s.worstName = n; s.worstError = "SSH yok"
         }
-        s.history = Array(((FleetSummary.load()?.history ?? []) + [a.online]).suffix(48))
+        s.states = states
+        s.history = prev?.history ?? []
+        if sweepDone { s.history = Array((s.history + [s.online]).suffix(48)) }
         s.save()
         WidgetCenter.shared.reloadAllTimelines()
     }

@@ -17,6 +17,9 @@ struct FleetSummary: Codable {
     var updated = Date()
     /// Son yayinlardaki cevrimici sayilari (en fazla 48); widget'taki egri icin.
     var history: [Int] = []
+    /// Relay basina son bilinen durum (RelayState.rawValue). Yarim kalan tur
+    /// veya 10'luk arka plan turu sorgulamadigi relay'leri sifirlamasin diye.
+    var states: [String: String] = [:]
 
     static func load() -> FleetSummary? {
         guard let d = UserDefaults(suiteName: appGroup)?.data(forKey: key) else { return nil }
