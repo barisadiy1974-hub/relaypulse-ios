@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import WidgetKit
+import UserNotifications
 
 @MainActor
 final class FleetStore: ObservableObject {
@@ -96,10 +97,22 @@ final class FleetStore: ObservableObject {
     }
 
     private var lastWidgetCounts: [Int] = []
+    private var widgetPublishTask: Task<Void, Never>?
 
     /// Widget'in okudugu ozet; sayilar degistiginde App Group'a yazilir.
-    /// Tur sonunu beklemek widget'i dakikalarca geride birakiyordu.
+    /// Tur sonunu beklemek widget'i dakikalarca geride birakiyordu; her
+    /// degisimde tazelemek ise tur boyunca 143 reload uretip iOS butcesini
+    /// bitiriyordu (widget ara degerde takili kaldi). 3 sn debounce ikisini cozer.
     private func publishWidgetSummary() {
+        widgetPublishTask?.cancel()
+        widgetPublishTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            writeWidgetSummary()
+        }
+    }
+
+    private func writeWidgetSummary() {
         let a = aggregate
         let counts = [a.total, a.online, a.warn, a.stale, a.offline]
         guard counts != lastWidgetCounts else { return }
@@ -455,6 +468,17 @@ final class FleetStore: ObservableObject {
         statuses[name] = st
     }
 
+    /// Sadece stale -> offline gecisinde; her basarisiz poll'da degil.
+    private func notifyOffline(_ name: String, _ error: String?) {
+        let c = UNMutableNotificationContent()
+        c.title = "\(name) çevrimdışı"
+        c.body = error ?? "Relay'e ulaşılamıyor"
+        c.sound = .default
+        c.threadIdentifier = "relay-offline"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "offline-\(name)", content: c, trigger: nil))
+    }
+
     private func recordFailure(_ name: String, _ error: Error) {
         var st = statuses[name] ?? RelayStatus(name: name)
         // Our own errors carry English text; anything else is described rather
@@ -485,6 +509,7 @@ final class FleetStore: ObservableObject {
         // in ~105ms when probed on their own. Matches the desktop app's threshold.
         let staleAfter = max(1, offlineAfter - 1)
         if st.fails >= offlineAfter {
+            if st.state != .offline { notifyOffline(name, st.lastError) }
             st.state = .offline
         } else if st.fails >= staleAfter {
             st.state = .stale

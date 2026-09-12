@@ -1,5 +1,6 @@
 import BackgroundTasks
 import SwiftUI
+import UserNotifications
 
 private enum RelayBackgroundRefresh {
     static let identifier = "com.baris.relaypulse.refresh"
@@ -33,6 +34,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             }
             task.expirationHandler = { work.cancel() }
         }
+        // Relay dustugunde yerel bildirim (ses + titresim). iPhone kilitliyken
+        // ayni bildirim eslesmis Apple Watch'a otomatik yansir.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         return true
     }
 }
