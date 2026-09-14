@@ -1,0 +1,8 @@
+/* Yerel uyarilar. 7/24 push uyarilari nobetciden gelir, buradan degil. */
+"relay.fixed"            = "%@ onarıldı";
+"relay.fixFailed"        = "%@ onarılamadı";
+"relay.offline.title"    = "%@ çevrimdışı";
+"relay.offline.body"     = "Relay'e ulaşılamıyor";
+"relay.recovered.title"  = "%@ geri geldi";
+"relay.recovered.body"   = "Relay tekrar çevrimiçi";
+"relay.recovered.anonDown" = "Sunucu yanıt veriyor — anon: %@";

@@ -7,6 +7,7 @@ enum AgentError: LocalizedError {
     case transport(String)
     case decode(String)
     case noURL
+    case certChanged
 
     var errorDescription: String? {
         switch self {
@@ -21,12 +22,17 @@ enum AgentError: LocalizedError {
         case .transport(let m): return m
         case .decode(let m):   return "Could not decode JSON: \(m)"
         case .noURL:           return "Invalid address"
+        // Not a network fault and not a token fault: the agent answered with a
+        // different public key than the one this phone pinned. Either the agent
+        // was reinstalled or something is sitting in the middle.
+        case .certChanged:     return "Agent certificate changed — reinstall? Reset pinned certificates in Settings"
         }
     }
 }
 
 /// Connects straight to each relay's HTTPS agent — no backend in between.
-/// Self-signed certificates are accepted; identity is proven by X-Agent-Token.
+/// Certificates are self-signed, so they are pinned on first sight (CertPin)
+/// rather than trusted blindly; the token only ever goes to the same key.
 final class AgentClient: NSObject, URLSessionDelegate {
     static let shared = AgentClient()
 
@@ -37,8 +43,8 @@ final class AgentClient: NSObject, URLSessionDelegate {
         // req.assumesHTTP3Capable in fetchOnce); otherwise, sweeping a large
         // fleet in parallel wastes time on QUIC attempts that fall back to TCP,
         // which showed up as spurious "stale" cards.
-        cfg.timeoutIntervalForRequest = 12
-        cfg.timeoutIntervalForResource = 16
+        cfg.timeoutIntervalForRequest = 20
+        cfg.timeoutIntervalForResource = 25
         cfg.waitsForConnectivity = false
         cfg.httpMaximumConnectionsPerHost = 2
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -76,6 +82,9 @@ final class AgentClient: NSObject, URLSessionDelegate {
         do {
             (data, resp) = try await session.data(for: req)
         } catch let e as URLError {
+            // A pin mismatch surfaces here as a cancelled/secure-connection
+            // error; CertPin knows which host it just refused.
+            if CertPin.takeRejection(url.host ?? "") { throw AgentError.certChanged }
             if e.code == .timedOut { throw AgentError.timeout }
             // Not localizedDescription: Foundation translates it into the
             // phone's language, and the app is English everywhere else.
@@ -96,13 +105,19 @@ final class AgentClient: NSObject, URLSessionDelegate {
         }
     }
 
-    // MARK: - Accept self-signed certificates
+    // MARK: - Pinned self-signed certificates
     func urlSession(_ session: URLSession,
                     didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust else {
             completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        let host = challenge.protectionSpace.host
+        guard let hash = CertPin.publicKeyHash(trust), CertPin.accepts(host: host, hash: hash) else {
+            CertPin.markRejected(host)
+            completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
         completionHandler(.useCredential, URLCredential(trust: trust))

@@ -9,7 +9,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0.6"
-    CURRENT_PROJECT_VERSION: "18"
+    CURRENT_PROJECT_VERSION: "22"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: D694LXAZFQ
     CODE_SIGN_STYLE: Automatic
@@ -19,10 +19,7 @@ settings:
     # SPM bagimliliklari ayri proje oldugu icin etkilenmez (komut satirindan
     # verilirse onlarla catisir ve arsivleme basarisiz olur).
     Release:
-      CODE_SIGN_STYLE: Manual
-      PROVISIONING_PROFILE_SPECIFIER: RelayPulse AppStore Distribution
-      CODE_SIGN_IDENTITY: "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
-      "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
+      CODE_SIGN_STYLE: Automatic
 
 # SSH: Apple'ın resmi swift-nio-ssh'i doğrudan kullanılıyor.
 # Citadel (yaygın sarmalayıcı) 0.12.1'de swift-nio-ssh'i üçüncü taraf bir
@@ -78,15 +75,16 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "15.0"
       configs:
         Release:
-          CODE_SIGN_STYLE: Manual
-          PROVISIONING_PROFILE_SPECIFIER: RelayPulse AppStore Distribution
-          CODE_SIGN_IDENTITY: "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
-          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Distribution: baris adiyaman (D694LXAZFQ)"
+          CODE_SIGN_STYLE: Automatic
+          # App Store derlemesi production APNs ister; gelistirme derlemesi
+          # sandbox'ta kalir. Yanlis eslesmede push sessizce calismaz.
+          CODE_SIGN_ENTITLEMENTS: RelayPulse/RelayPulse-Release.entitlements
 
   RelayPulseWidget:
     type: app-extension
     platform: iOS
-    deploymentTarget: "16.0"
+    # 16.1, not 16.0: ActivityConfiguration (Live Activity) starts there.
+    deploymentTarget: "16.1"
     sources:
       - path: RelayPulseWidget
       - path: Shared

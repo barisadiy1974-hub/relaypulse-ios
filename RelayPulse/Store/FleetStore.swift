@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftUI
 import WidgetKit
 import UserNotifications
@@ -25,8 +26,10 @@ final class FleetStore: ObservableObject {
     static let freeRelayLimit = 3
 
     /// Kept in sync from PurchaseStore by RootView; FleetStore has no business
-    /// talking to StoreKit itself.
-    @Published var isEntitled = false
+    /// talking to StoreKit itself. Seeded from the same cache PurchaseStore
+    /// writes, because this store is built before StoreKit answers and the
+    /// first widget summary would otherwise be published for a 3-relay fleet.
+    @Published var isEntitled = UserDefaults.standard.bool(forKey: PurchaseStore.entitledKey)
 
     /// Everything the operator has configured. Always complete: the limit
     /// applies to what gets polled, never to what they can see or edit, so
@@ -42,6 +45,13 @@ final class FleetStore: ObservableObject {
     var isRelayLimited: Bool { monitoredServers.count < servers.count }
     @Published private(set) var statuses: [String: RelayStatus] = [:] { didSet { publishWidgetSummary(sweepDone: false) } }
     @Published private(set) var isPolling = false
+    /// Set when a whole sweep failed at once — the phone's network, not the fleet.
+    @Published private(set) var networkSuspect = false
+    /// True while iOS reports this device has no usable network path. A phone in
+    /// a tunnel is the commonest cause of "all my servers went down at once".
+    @Published private(set) var deviceOffline = false
+
+    private let pathMonitor = NWPathMonitor()
     @Published private(set) var lastSweep: Date? { didSet { publishWidgetSummary(sweepDone: true) } }
     @Published var pollSec: Int = 120
     @Published var offlineAfter: Int = 3
@@ -55,6 +65,7 @@ final class FleetStore: ObservableObject {
         let result: Result<AgentMetrics, Error>
         var repairedToken: String? = nil
         var tokenStale: Bool = false
+        var certChanged: Bool = false
     }
 
     /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
@@ -70,6 +81,13 @@ final class FleetStore: ObservableObject {
         if let export = ServerStorage.load() {
             apply(export, persist: false)
         }
+        // Watch the phone's own connection. Without this the app cannot tell
+        // "the servers are down" from "I am in a tunnel", and it wakes the
+        // operator for the second one.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.deviceOffline = path.status != .satisfied }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "relaypulse.path"))
     }
 
     var isConfigured: Bool { !servers.isEmpty }
@@ -106,12 +124,18 @@ final class FleetStore: ObservableObject {
     private func publishWidgetSummary(sweepDone: Bool) {
         let prev = FleetSummary.load()
         let pool = monitoredServers
-        var states = (prev?.states ?? [:]).filter { st in pool.contains { $0.name == st.key } }
+        // Hatirlanan durum yalnizca relay yapilandirmadan cikinca silinir.
+        // Once izlenen dilime gore suzuluyordu; o dilim acilista bir tur kisa
+        // kaliyor (hak StoreKit'ten asenkron geliyor), yani her soguk acilis
+        // 143 relay'in 140'inin hafizasini siliyor ve widget sayisi arka plan
+        // turlariyla onar onar geri tirmaniyordu.
+        var states = (prev?.states ?? [:]).filter { st in servers.contains { $0.name == st.key } }
         for srv in pool {
             if let st = statuses[srv.name], st.state != .unknown { states[srv.name] = st.state.rawValue }
         }
+        let monitored = Set(pool.map(\.name))
         var s = FleetSummary(total: pool.count)
-        for v in states.values {
+        for (name, v) in states where monitored.contains(name) {
             switch RelayState(rawValue: v) {
             case .online:  s.online += 1
             case .warn:    s.warn += 1
@@ -139,6 +163,11 @@ final class FleetStore: ObservableObject {
         if sweepDone { s.history = Array((s.history + [s.online]).suffix(48)) }
         s.save()
         WidgetCenter.shared.reloadAllTimelines()
+        // Same numbers on the lock screen, with a counter that keeps running
+        // between polls.
+        if #available(iOS 16.2, *) {
+            OutageActivity.sync(worstName: s.worstName, offlineCount: s.offline, since: s.worstSince)
+        }
     }
 
     func status(for server: Server) -> RelayStatus {
@@ -312,6 +341,12 @@ final class FleetStore: ObservableObject {
     private func sweep(_ targets: [Server]) async {
         guard !demoMode else { return }   // demo veride ag baglantisi kurulmaz
         guard !isPolling, isConfigured else { return }
+        // No network here means every request would fail and every relay would
+        // march toward red for a reason that has nothing to do with the relays.
+        guard !deviceOffline else {
+            networkSuspect = true
+            return
+        }
         isPolling = true
         defer { isPolling = false }
 
@@ -355,6 +390,11 @@ final class FleetStore: ObservableObject {
                     do { return SweepOutcome(name: s.name, result: .success(try await AgentClient.shared.fetch(s))) }
                     catch {
                         var tokenStale = false
+                        // A refused certificate pin must not vanish just because
+                        // SSH can still read the metrics: it is the one failure
+                        // here that can mean someone is in the middle.
+                        var certChanged = false
+                        if let e = error as? AgentError, case .certChanged = e { certChanged = true }
                         if let e = error as? AgentError, case .badToken = e {
                             tokenStale = true
                             // Read the relay's real token and try again with it.
@@ -379,16 +419,33 @@ final class FleetStore: ObservableObject {
                         // relays the Mac showed green. Costs an SSH round trip on
                         // roughly one or two relays per sweep.
                         if let m = await SSHMetrics.shared.fetch(s, critical: isCritical) {
-                            return SweepOutcome(name: s.name, result: .success(m), tokenStale: tokenStale)
+                            return SweepOutcome(name: s.name, result: .success(m),
+                                                tokenStale: tokenStale, certChanged: certChanged)
                         }
-                        return SweepOutcome(name: s.name, result: .failure(error), tokenStale: tokenStale)
+                        return SweepOutcome(name: s.name, result: .failure(error),
+                                            tokenStale: tokenStale, certChanged: certChanged)
                     }
                 }
             }
             for _ in 0..<maxInFlight { addNext() }
+            var outcomes: [SweepOutcome] = []
             for await outcome in group {
                 // Store a repaired token first, so the next sweep uses it.
                 if let token = outcome.repairedToken { applyRepairedToken(outcome.name, token) }
+                outcomes.append(outcome)
+                addNext()
+            }
+
+            // Judged over the whole sweep, not relay by relay: when this many
+            // hosts fail at once the phone lost its network, not the fleet.
+            // Measured 2026-09-13 on the watcher that polls the same fleet from
+            // a server: one two-hour network wobble produced 55 false "offline"
+            // alarms while every relay was up. Recording those failures would
+            // march healthy relays to red and wake the operator for nothing.
+            let failed = outcomes.filter { if case .failure = $0.result { return true }; return false }.count
+            networkSuspect = FleetStore.fleetWideFailure(failed: failed, total: outcomes.count)
+
+            for outcome in outcomes {
                 switch outcome.result {
                 case .success(let m):
                     recordSuccess(outcome.name, m)
@@ -397,18 +454,48 @@ final class FleetStore: ObservableObject {
                     if outcome.tokenStale && outcome.repairedToken == nil {
                         markTokenStale(outcome.name)
                     }
-                case .failure(let e): recordFailure(outcome.name, e)
+                    if outcome.certChanged { markCertChanged(outcome.name) }
+                case .failure(let e):
+                    // Suppressed, and the fail counter is left alone: our own
+                    // outage must not push anyone's relay toward red.
+                    guard !networkSuspect else { continue }
+                    recordFailure(outcome.name, e)
+                    // One more try before the card turns red and the phone
+                    // rings. Measured 2026-09-14 on a 140-relay fleet: every
+                    // single-relay alarm that night cleared on the next poll,
+                    // i.e. none of them were real. A confirmation costs one
+                    // request; a false alarm costs the operator's sleep.
+                    if statuses[outcome.name]?.state == .offline,
+                       let server = targets.first(where: { $0.name == outcome.name }),
+                       let m = try? await AgentClient.shared.fetch(server) {
+                        recordSuccess(outcome.name, m)
+                    }
                 }
-                addNext()
             }
         }
         lastSweep = Date()
+    }
+
+    /// True when so much of one sweep failed that the network here is the
+    /// likelier explanation. Pure so the check is testable without a fleet.
+    /// Two rules, because fleets come in two shapes.
+    /// - Every server failing at once (two or more) is almost never the servers;
+    ///   a customer watching three machines loses all three when the phone drops
+    ///   its connection, and the old "at least five" rule never covered them.
+    /// - On a large fleet a tenth failing in one sweep is the same signal.
+    static func fleetWideFailure(failed: Int, total: Int) -> Bool {
+        guard total > 0, failed > 0 else { return false }
+        if total >= 2 && failed == total { return true }
+        return failed >= max(5, Int((Double(total) * 0.10).rounded(.up)))
     }
 
     // MARK: - Result processing + flap dampening
 
     private func recordSuccess(_ name: String, _ m: AgentMetrics) {
         var st = statuses[name] ?? RelayStatus(name: name)
+        // Only .offline: that is the state that woke the operator up, so that is
+        // the one worth telling them is over. A stale relay never notified.
+        let wasOffline = st.state == .offline
         let now = Date()
 
         // rx/tx Mbps + cpu% delta — same logic as monitor.js
@@ -441,6 +528,7 @@ final class FleetStore: ObservableObject {
         st.cpuCount = m.cpuCount
         st.state = m.anonHealthy ? .online : .warn
         statuses[name] = st
+        if wasOffline { notifyRecovered(name, anonHealthy: m.anonHealthy, anonLabel: m.anonLabel) }
     }
 
     private func recordBridgeSuccess(_ r: BridgeClient.Relay) {
@@ -468,6 +556,16 @@ final class FleetStore: ObservableObject {
         persistCurrent()
     }
 
+    /// SSH covered for the agent, but the agent's certificate no longer matches
+    /// the pinned key. Yellow rather than green — the readings are real, the
+    /// agent connection is not to be trusted until the operator says why.
+    private func markCertChanged(_ name: String) {
+        guard var st = statuses[name] else { return }
+        st.state = .warn
+        st.lastError = AgentError.certChanged.errorDescription
+        statuses[name] = st
+    }
+
     /// Keeps the metrics SSH just fetched, but flags the out-of-date agent token
     /// so it gets fixed instead of being silently carried by the fallback.
     private func markTokenStale(_ name: String) {
@@ -477,15 +575,66 @@ final class FleetStore: ObservableObject {
         statuses[name] = st
     }
 
+    /// Widget'taki "Onar" dugmesinin biraktigi istegi calistirir. Uygulama one
+    /// geldiginde cagrilir: SSH oturumu ve filo anahtari burada, widget'ta degil.
+    func runPendingFix() async {
+        guard let req = PendingFix.take(),
+              let srv = servers.first(where: { $0.name == req.relay }),
+              let cmd = AppSettings.loadCommands().first else { return }
+        do {
+            let r = try await SSHRunner.shared.run(cmd.command, on: srv, timeout: 60)
+            let ok = (r.exitStatus ?? 0) == 0
+            let text = r.combined.isEmpty ? "(no output)" : r.combined
+            AILog.shared.add(kind: .command, relay: srv.name, title: cmd.name, detail: text, ok: ok)
+            notifyFix(srv.name, ok ? text : "Komut hata dondurdu", ok: ok)
+            await sweep()
+        } catch {
+            AILog.shared.add(kind: .error, relay: srv.name, title: cmd.name,
+                             detail: error.localizedDescription, ok: false)
+            notifyFix(srv.name, error.localizedDescription, ok: false)
+        }
+    }
+
+    /// Onarim sonucu: tetikleyen dokunus widget'ta oldugu icin kullanici
+    /// uygulamanin neresine dustugunu bilmiyor; sonucu bildirimle soyle.
+    private func notifyFix(_ name: String, _ detail: String, ok: Bool) {
+        let c = UNMutableNotificationContent()
+        c.title = String(format: NSLocalizedString(ok ? "relay.fixed" : "relay.fixFailed", comment: ""), name)
+        c.body = String(detail.prefix(180))
+        c.sound = ok ? nil : .default
+        c.threadIdentifier = "relay-fix"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "fix-\(name)", content: c, trigger: nil))
+    }
+
     /// Sadece stale -> offline gecisinde; her basarisiz poll'da degil.
     private func notifyOffline(_ name: String, _ error: String?) {
         let c = UNMutableNotificationContent()
-        c.title = "\(name) çevrimdışı"
-        c.body = error ?? "Relay'e ulaşılamıyor"
+        c.title = String(format: NSLocalizedString("relay.offline.title", comment: ""), name)
+        c.body = error ?? NSLocalizedString("relay.offline.body", comment: "")
         c.sound = .default
         c.threadIdentifier = "relay-offline"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "offline-\(name)", content: c, trigger: nil))
+    }
+
+    /// Relay cevap verdi. Alarmi kapatan bildirim: gece kalkan operator
+    /// telefona bakip bittigini gorebilsin diye — ve kilit ekranindaki eski
+    /// cevrimdisi bildirimi de birakmasin.
+    private func notifyRecovered(_ name: String, anonHealthy: Bool, anonLabel: String) {
+        UNUserNotificationCenter.current()
+            .removeDeliveredNotifications(withIdentifiers: ["offline-\(name)"])
+        let c = UNMutableNotificationContent()
+        c.title = String(format: NSLocalizedString("relay.recovered.title", comment: ""), name)
+        // Ulasilabilir olmak saglikli olmak degil: SSH doner ama anon hala
+        // kapali olabilir, ve o zaman "her sey yolunda" demek yanlis olur.
+        c.body = anonHealthy
+            ? NSLocalizedString("relay.recovered.body", comment: "")
+            : String(format: NSLocalizedString("relay.recovered.anonDown", comment: ""), anonLabel)
+        c.sound = nil
+        c.threadIdentifier = "relay-offline"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "recovered-\(name)", content: c, trigger: nil))
     }
 
     private func recordFailure(_ name: String, _ error: Error) {

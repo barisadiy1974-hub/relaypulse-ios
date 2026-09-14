@@ -12,13 +12,35 @@ private enum RelayBackgroundRefresh {
     }
 }
 
+/// APNs cihaz token'i. Nobetci (VPS) bunu bilmeden push atamaz, o yuzden
+/// Documents'a da yazilir: `devicectl device copy from` ile kablosuz cekilebilir,
+/// kullanici ekrandan elle kopyalamak zorunda kalmaz.
+enum APNSToken {
+    static let key = "apnsDeviceToken"
+
+    static var current: String? { UserDefaults.standard.string(forKey: key) }
+    static var lastError: String? { UserDefaults.standard.string(forKey: key + "Error") }
+
+    static func store(_ hex: String) {
+        UserDefaults.standard.set(hex, forKey: key)
+        UserDefaults.standard.removeObject(forKey: key + "Error")
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("apns_token.txt")
+        try? hex.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    static func store(error: String) {
+        UserDefaults.standard.set(error, forKey: key + "Error")
+    }
+}
+
 /// Registers the background refresh task the pre-SwiftUI way.
 ///
 /// `.backgroundTask(.appRefresh:)` would be tidier but it is iOS 16+, and
 /// `SceneBuilder` does not accept an `if #available` around a scene modifier, so
 /// there is no way to apply it conditionally. Registering here works from iOS 13
 /// on — one code path, and the iPhone 7 on iOS 15 still gets background refresh.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -36,8 +58,40 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
         // Relay dustugunde yerel bildirim (ses + titresim). iPhone kilitliyken
         // ayni bildirim eslesmis Apple Watch'a otomatik yansir.
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            // Uzak bildirim kaydi izin verilmeden yapilirsa token gelir ama
+            // hicbir sey gosterilmez; izne bagla.
+            guard granted else { return }
+            DispatchQueue.main.async { application.registerForRemoteNotifications() }
+        }
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        APNSToken.store(deviceToken.map { String(format: "%02x", $0) }.joined())
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        APNSToken.store(error: error.localizedDescription)
+    }
+
+    /// Uygulama ondeyken de goster. Once sadece "relay-fix" gecerdi; alarmlar
+    /// bastiriliyordu (kart zaten kirmiziya doner diye). Ama poll YALNIZCA
+    /// uygulama ondeyken calisiyor — yani bastirilan tek durum, bildirimin
+    /// uretilebildigi tek durumdu ve kullanici hicbir alarm gormuyordu.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler handler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        handler([.banner, .sound])
     }
 }
 
@@ -61,9 +115,15 @@ struct RelayPulseApp: App {
                 }
                 // Single-parameter form: the (old, new) closure is iOS 17+ and the
                 // app supports iOS 15 so an iPhone 7 can run it.
+                .onReceive(NotificationCenter.default.publisher(for: .relayFixRequested)) { _ in
+                    Task { await fleet.runPendingFix() }
+                }
                 .onChange(of: scenePhase) { phase in
                     switch phase {
-                    case .active: fleet.startPolling()
+                    case .active:
+                        fleet.startPolling()
+                        // Widget'tan gelen onarim istegi varsa hemen calistir.
+                        Task { await fleet.runPendingFix() }
                     case .background:
                         fleet.stopPolling()
                         RelayBackgroundRefresh.schedule()

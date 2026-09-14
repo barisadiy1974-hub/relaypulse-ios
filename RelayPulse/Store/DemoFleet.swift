@@ -32,7 +32,7 @@ enum DemoFleet {
     static var servers: [Server] {
         blueprint.map {
             Server(name: $0.name, host: $0.host, agentPort: 19191,
-                   agentScheme: "https", agentToken: "demo", wallet: "",
+                   agentScheme: "https", agentToken: "demo",
                    sshUser: "root", sshPort: 22)
         }
     }

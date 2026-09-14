@@ -9,8 +9,15 @@ import StoreKit
 final class PurchaseStore: ObservableObject {
     static let productID = "com.baris.relaypulse.pro.lifetime"
 
+    /// Son dogrulanan hak, acilista hemen bilinsin diye onbellekte tutulur.
+    /// Onbelleksiz her soguk acilista StoreKit cevap verene kadar izlenen filo
+    /// ucretsiz dilime (3 relay) dusuyordu.
+    static let entitledKey = "entitledCache"
+
     @Published private(set) var product: Product?
-    @Published private(set) var isEntitled = false
+    @Published private(set) var isEntitled = UserDefaults.standard.bool(forKey: PurchaseStore.entitledKey) {
+        didSet { UserDefaults.standard.set(isEntitled, forKey: Self.entitledKey) }
+    }
     @Published private(set) var errorMessage: String?
 
     private var updatesTask: Task<Void, Never>?

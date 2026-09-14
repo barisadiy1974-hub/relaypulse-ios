@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject var fleet: FleetStore
@@ -31,7 +32,48 @@ struct SettingsView: View {
         watchServicesText = WatchTargets.servicesString
         watchPortsText = WatchTargets.portsString
     }
+
+    private var pushTokenShort: String {
+        if let t = APNSToken.current { return String(t.prefix(8)) + "…" + String(t.suffix(4)) }
+        return APNSToken.lastError ?? "none yet"
+    }
+
+    private func refreshNotifStatus() async {
+        let s = await UNUserNotificationCenter.current().notificationSettings()
+        switch s.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: notifStatus = "Allowed"; notifDenied = false
+        case .denied: notifStatus = "Denied"; notifDenied = true
+        default: notifStatus = "Not asked yet"; notifDenied = false
+        }
+        // Izin verilmis olmak metnin gorunecegi anlamina gelmiyor: "Show
+        // Previews: Never" ile alarm gelir, calar, ama hangi relay'in dustugu
+        // yazmaz — bildirim ise yaramaz hale gelir, uyar.
+        previewsHidden = s.showPreviewsSetting == .never
+    }
+
+    /// Fires in 3 seconds, not immediately, so it can be tested with the screen
+    /// locked — the case the operator actually cares about.
+    private func sendTestNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in
+            let c = UNMutableNotificationContent()
+            c.title = "RelayPulse test"
+            c.body = "Notifications are working."
+            c.sound = .default
+            c.threadIdentifier = "relay-offline"
+            center.add(UNNotificationRequest(
+                identifier: "notif-test",
+                content: c,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)))
+            Task { @MainActor in await refreshNotifStatus() }
+        }
+    }
+
     @State private var error: String?
+    @State private var pinCount = CertPin.count
+    @State private var notifStatus = "—"
+    @State private var notifDenied = false
+    @State private var previewsHidden = false
     @EnvironmentObject private var purchases: PurchaseStore
 
     private let intervals = [30, 60, 120, 300, 600]
@@ -104,6 +146,43 @@ struct SettingsView: View {
                     get: { fleet.offlineAfter },
                     set: { fleet.offlineAfter = $0; fleet.persistSettings() }), in: 1...5)
             }
+
+            Section {
+                LabeledRow("Permission", value: notifStatus)
+                LabeledRow("Push token", value: pushTokenShort)
+                if let token = APNSToken.current {
+                    Button("Copy push token") { UIPasteboard.general.string = token }
+                }
+                if previewsHidden {
+                    Text("iOS is set to hide notification text for this app, so alerts arrive without saying which relay is down. Fix: Settings › Notifications › RelayPulse › Show Previews › Always.")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.warn(scheme))
+                }
+                Button("Send test notification") { sendTestNotification() }
+                if notifDenied || previewsHidden {
+                    Button("Open iOS Settings") {
+                        if let u = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(u)
+                        }
+                    }
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("A relay going offline alerts you while RelayPulse is open, and during the background refreshes iOS grants the app. For alerts while the app is closed, the push token below has to be registered with the watcher that polls the fleet around the clock.")
+            }
+            .task { await refreshNotifStatus() }
+
+            Section {
+                LabeledRow("Pinned agent certificates", value: "\(pinCount)")
+                Button("Reset pinned certificates") { CertPin.reset(); pinCount = 0 }
+                    .disabled(pinCount == 0)
+            } header: {
+                Text("Agent security")
+            } footer: {
+                Text("Relay agents use self-signed certificates, so RelayPulse remembers each agent's key the first time it answers and refuses anything else — otherwise a machine on the network in between could collect your agent tokens. Reset this only after reinstalling an agent; the next poll learns the new keys.")
+            }
+            .onAppear { pinCount = CertPin.count }
 
             if let error {
                 Section { Text(error).foregroundStyle(Theme.err(scheme)).font(.footnote) }

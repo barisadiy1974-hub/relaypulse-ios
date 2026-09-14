@@ -56,6 +56,22 @@ struct DashboardView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
+                    // A whole sweep failing at once is almost always this
+                    // phone's connection. Say so, rather than letting the cards
+                    // decay to red and implying the fleet went down.
+                    if fleet.networkSuspect {
+                        HStack(spacing: 8) {
+                            Image(systemName: "wifi.exclamationmark")
+                            Text("Network problem here — readings paused, relay states kept")
+                                .font(.footnote.weight(.semibold))
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(Theme.warn(scheme).opacity(0.15))
+                        .foregroundStyle(Theme.warn(scheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
                     FleetSummaryCard(agg: fleet.aggregate, totalRx: fleet.totalRxMbps, totalTx: fleet.totalTxMbps)
 
                     Picker("Filter", selection: $filter) {

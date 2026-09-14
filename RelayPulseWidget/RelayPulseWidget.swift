@@ -1,5 +1,6 @@
-import WidgetKit
+import AppIntents
 import SwiftUI
+import WidgetKit
 
 struct Entry: TimelineEntry {
     let date: Date
@@ -129,11 +130,28 @@ struct WidgetView: View {
             if let n = s.worstName {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(err)
                 Text("\(n) · \(s.worstError ?? "") · \(age(s.worstSince))").foregroundStyle(err).lineLimit(1)
+                if #available(iOSApplicationExtension 17.0, *) {
+                    Spacer(minLength: 4)
+                    fixButton(n)
+                }
             } else {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(ok)
                 Text("Alarm yok").foregroundStyle(dim)
             }
         }.font(.system(size: 10, weight: .medium))
+    }
+
+    /// Opens the app and runs the first auto-fix command on that relay.
+    @available(iOSApplicationExtension 17.0, *)
+    func fixButton(_ name: String) -> some View {
+        Button(intent: FixRelayIntent(relay: name)) {
+            Text("Onar")
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(err.opacity(0.22)))
+                .foregroundStyle(err)
+        }
+        .buttonStyle(.plain)
     }
 
     func small(_ s: FleetSummary) -> some View {
@@ -219,6 +237,13 @@ extension View {
 }
 
 @main
+struct RelayPulseWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        RelayPulseWidget()
+        OutageLiveActivity()
+    }
+}
+
 struct RelayPulseWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "RelayPulseWidget", provider: Provider()) { e in

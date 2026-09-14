@@ -17,7 +17,6 @@ struct ServerEditView: View {
     @State private var port = "19191"
     @State private var scheme = "https"
     @State private var token = ""
-    @State private var wallet = ""
     @State private var sshUser = "root"
     @State private var sshPort = "22"
     @State private var showTokenPlain = false
@@ -86,15 +85,6 @@ struct ServerEditView: View {
                     Text("Used by the tools (Nyx, htop, anonrc, fix commands). The private key is shared across relays — set it in Tools › SSH key.")
                 }
 
-                Section("Optional") {
-                    // "Payout address", not "Wallet": the app stores and shows
-                    // this string and nothing else — no balance, no signing, no
-                    // custody — and the old label described a feature that does
-                    // not exist here.
-                    LabeledField("Payout address", text: $wallet, placeholder: "0x…")
-                        .autocorrectionDisabled().textInputAutocapitalization(.never)
-                }
-
                 if let error {
                     Section { Text(error).foregroundStyle(.red).font(.footnote) }
                 }
@@ -139,7 +129,7 @@ struct ServerEditView: View {
         guard case .edit(let s) = mode else { return }
         name = s.name; host = s.host; port = "\(s.agentPort)"
         scheme = s.agentScheme.isEmpty ? "https" : s.agentScheme
-        token = s.agentToken; wallet = s.wallet
+        token = s.agentToken
         sshUser = s.sshUser; sshPort = "\(s.sshPort)"
     }
 
@@ -150,7 +140,6 @@ struct ServerEditView: View {
             agentPort: Int(port) ?? 19191,
             agentScheme: scheme,
             agentToken: token.trimmingCharacters(in: .whitespaces),
-            wallet: wallet.trimmingCharacters(in: .whitespaces),
             sshUser: sshUser.trimmingCharacters(in: .whitespaces).isEmpty ? "root" : sshUser.trimmingCharacters(in: .whitespaces),
             sshPort: Int(sshPort) ?? 22
         )

@@ -8,7 +8,6 @@ struct Server: Codable, Identifiable, Hashable {
     var agentPort: Int
     var agentScheme: String
     var agentToken: String
-    var wallet: String
     /// SSH (for tools): user and port. The private key is shared and stored in Keychain.
     var sshUser: String
     var sshPort: Int
@@ -16,18 +15,17 @@ struct Server: Codable, Identifiable, Hashable {
     var id: String { name }
 
     enum CodingKeys: String, CodingKey {
-        case name, host, agentPort, agentScheme, agentToken, wallet, sshUser, sshPort
+        case name, host, agentPort, agentScheme, agentToken, sshUser, sshPort
     }
 
     init(name: String, host: String, agentPort: Int = 19191,
-         agentScheme: String = "https", agentToken: String = "", wallet: String = "",
+         agentScheme: String = "https", agentToken: String = "",
          sshUser: String = "root", sshPort: Int = 22) {
         self.name = name
         self.host = host
         self.agentPort = agentPort
         self.agentScheme = agentScheme.lowercased()
         self.agentToken = agentToken
-        self.wallet = wallet
         self.sshUser = sshUser
         self.sshPort = sshPort
     }
@@ -39,7 +37,6 @@ struct Server: Codable, Identifiable, Hashable {
         agentPort = (try? c.decode(Int.self, forKey: .agentPort)) ?? 19191
         agentScheme = ((try? c.decode(String.self, forKey: .agentScheme)) ?? "https").lowercased()
         agentToken = (try? c.decode(String.self, forKey: .agentToken)) ?? ""
-        wallet = (try? c.decode(String.self, forKey: .wallet)) ?? ""
         sshUser = (try? c.decode(String.self, forKey: .sshUser)) ?? "root"
         sshPort = (try? c.decode(Int.self, forKey: .sshPort)) ?? 22
     }
