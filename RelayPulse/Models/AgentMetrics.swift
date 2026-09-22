@@ -29,6 +29,11 @@ struct AgentMetrics: Decodable {
     var anonHealthy: Bool {
         let state = (anon?.active ?? "").lowercased()
         if state == "active" || state == "activating" { return true }
+        // BUG FIX (2026-09-22): eskiden burada kosulsuz "port varsa saglikli" deniyordu.
+        // Servisi cokmus ama soketi hala acik bir relay YESIL gorunuyordu — masaustu
+        // ayni relay'i dogru sekilde kirmizi gosteriyordu (monitor.js anonStateFrom).
+        // Dinlenen port ancak servis durumu HIC bilinmiyorken kanit sayilir.
+        if !state.isEmpty && state != "unknown" { return false }
         if let ports = anon?.ports, !ports.isEmpty { return true }
         return false
     }
