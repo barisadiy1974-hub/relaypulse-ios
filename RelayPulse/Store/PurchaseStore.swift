@@ -16,7 +16,15 @@ final class PurchaseStore: ObservableObject {
 
     @Published private(set) var product: Product?
     @Published private(set) var isEntitled = UserDefaults.standard.bool(forKey: PurchaseStore.entitledKey) {
-        didSet { UserDefaults.standard.set(isEntitled, forKey: Self.entitledKey) }
+        didSet {
+            // Sadece Release yazar. Debug derlemesi asagida hakki kosulsuz true
+            // yapiyor; onu diske yazarsa uzerine kurulan TestFlight/App Store
+            // derlemesi de acilista tam filo ile basliyor (demo kapatilinca
+            // 3-relay limitine dusmez). Cache yalnizca gercek makbuzu yansitmali.
+            #if !DEBUG
+            UserDefaults.standard.set(isEntitled, forKey: Self.entitledKey)
+            #endif
+        }
     }
     @Published private(set) var errorMessage: String?
 
@@ -37,6 +45,11 @@ final class PurchaseStore: ObservableObject {
         await refreshEntitlement()
         do {
             product = try await Product.products(for: [Self.productID]).first
+            // Bos liste HATA FIRLATMIYOR: urun gelmeyince product sessizce nil kaliyor
+            // ve eskiden satin alma satiri tamamen kayboluyordu. Sebebini ekranda soyle.
+            errorMessage = product == nil
+                ? "The purchase is temporarily unavailable. Check your connection and tap Retry."
+                : nil
         } catch {
             errorMessage = "The purchase option is temporarily unavailable."
         }

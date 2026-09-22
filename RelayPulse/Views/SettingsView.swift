@@ -196,9 +196,20 @@ struct SettingsView: View {
                 }
                 // Nothing left to sell once they own it — offering the button
                 // anyway sends an owner into a purchase StoreKit will refuse.
-                if !purchases.isEntitled, let product = purchases.product {
-                    Button("Purchase RelayPulse Lifetime (\(product.displayPrice))") {
-                        Task { await purchases.purchase() }
+                // BUG FIX (2026-09-21): when StoreKit had not returned the product the
+                // whole row disappeared, so there was nothing on screen to buy. App
+                // Review could not find the in-app purchase and rejected the build
+                // under 2.1(b). The row now stays put and offers a retry instead.
+                if !purchases.isEntitled {
+                    if let product = purchases.product {
+                        Button("Purchase RelayPulse Lifetime (\(product.displayPrice))") {
+                            Task { await purchases.purchase() }
+                        }
+                    } else {
+                        LabeledRow("Purchase", value: "RelayPulse Lifetime — loading…")
+                        Button("Retry") {
+                            Task { await purchases.start() }
+                        }
                     }
                 }
                 Button("Restore Purchases") {
