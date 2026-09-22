@@ -1,0 +1,27 @@
+# Denetim takimi: Xcode projesi kurmadan, simulator acmadan, ag'a cikmadan
+# saf mantik dosyalarini derleyip dusmanca girdiyle kosar. Birkac saniye surer.
+#
+# -Onone SART: certpin-selfcheck.swift `assert` kullaniyor ve assert -O ile
+# derlenince tamamen kaybolur — is yesil doner ama hicbir sey kontrol edilmemistir.
+name: Audit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Agent metrikleri
+        run: |
+          swiftc -Onone -o /tmp/rp-audit \
+            RelayPulse/Models/AgentMetrics.swift scripts/audit/main.swift
+          /tmp/rp-audit
+      - name: CertPin TOFU
+        run: |
+          swiftc -Onone -o /tmp/rp-certpin \
+            RelayPulse/Net/CertPin.swift scripts/certpin-selfcheck.swift
+          /tmp/rp-certpin
