@@ -248,6 +248,11 @@ struct SettingsView: View {
                         Label("Remove all relays", systemImage: "trash")
                     }
                 }
+                NavigationLink {
+                    HelpView()
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
                 LabeledRow("Version", value: appVersion)
             } footer: {
                 Text("Monitoring plus on-demand tools. Unattended 24/7 auto-fix stays on desktop RelayPulse — iOS suspends background apps, so a phone cannot do it reliably.")

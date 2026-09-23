@@ -49,6 +49,12 @@ struct ToolsView: View {
                     row("Activity log / errors", "Diagnoses, commands that ran, errors",
                         "list.bullet.rectangle", Theme.muted(scheme))
                 }
+                NavigationLink {
+                    HelpView()
+                } label: {
+                    row("Help", "Making an SSH key, what the colours mean, why a relay will not connect",
+                        "questionmark.circle", Theme.accent(scheme))
+                }
             }
 
             Section {

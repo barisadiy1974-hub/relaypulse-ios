@@ -36,6 +36,13 @@ struct SSHSettingsView: View {
                         .foregroundStyle(Theme.warn(scheme))
                     Button { showPaste = true } label: { Label("Paste key", systemImage: "doc.on.clipboard") }
                     Button { showPicker = true } label: { Label("Import from file", systemImage: "doc.badge.arrow.up") }
+                    // Both buttons above assume a key already exists somewhere. It
+                    // usually does not, and that is where setup stalls.
+                    NavigationLink {
+                        HelpView()
+                    } label: {
+                        Label("I do not have a key yet", systemImage: "questionmark.circle")
+                    }
                 }
             } header: {
                 Text("SSH private key")
