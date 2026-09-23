@@ -57,6 +57,16 @@ final class FleetStore: ObservableObject {
     @Published var offlineAfter: Int = 3
     @Published private(set) var bridge: MacBridge?
 
+    /// Servers seen running relay software at least once. Sticky on purpose: the
+    /// relay tools (Nyx, relay config) matter most exactly when the relay is down
+    /// and the host stops reporting its unit, so they must not vanish then.
+    /// Everyone else — a plain web or database server — never sees them.
+    @Published private(set) var relayHosts: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "relayHosts") ?? []) {
+        didSet { UserDefaults.standard.set(Array(relayHosts), forKey: "relayHosts") }
+    }
+    var hasRelays: Bool { !demoMode && !relayHosts.isEmpty }
+
     /// One relay's result from a sweep, plus what the sweep learned on the way:
     /// a token read back off the relay after a 403, and whether a token problem
     /// is still outstanding.
@@ -153,10 +163,10 @@ final class FleetStore: ObservableObject {
             .first
         if let w = worst {
             s.worstName = w.name
-            s.worstError = w.state == .offline ? "SSH yok" : w.anonLabel
+            s.worstError = w.state == .offline ? "No SSH" : w.anonLabel
             s.worstSince = w.lastUpdated
         } else if let n = states.first(where: { $0.value == RelayState.offline.rawValue })?.key {
-            s.worstName = n; s.worstError = "SSH yok"
+            s.worstName = n; s.worstError = "No SSH"
         }
         s.states = states
         s.history = prev?.history ?? []
@@ -206,7 +216,7 @@ final class FleetStore: ObservableObject {
     func clearConfig() {
         guard !demoMode else { return }
         timer?.cancel(); timer = nil
-        servers = []; statuses = [:]; samples = [:]; lastSweep = nil
+        servers = []; statuses = [:]; samples = [:]; lastSweep = nil; relayHosts = []
         ServerStorage.clear()
     }
 
@@ -517,7 +527,9 @@ final class FleetStore: ObservableObject {
         st.fails = 0
         st.lastError = nil
         st.lastUpdated = now
-        st.anonHealthy = m.anonHealthy
+        if m.runsRelay && !relayHosts.contains(name) { relayHosts.insert(name) }
+        let healthy = m.anonHealthy(expectService: relayHosts.contains(name))
+        st.anonHealthy = healthy
         st.anonLabel = m.anonLabel
         st.conn = m.conn.map { Int($0) }
         st.memPct = m.mem?.pct
@@ -526,9 +538,9 @@ final class FleetStore: ObservableObject {
         st.uptime = m.uptime
         st.publicIp = m.publicIp
         st.cpuCount = m.cpuCount
-        st.state = m.anonHealthy ? .online : .warn
+        st.state = healthy ? .online : .warn
         statuses[name] = st
-        if wasOffline { notifyRecovered(name, anonHealthy: m.anonHealthy, anonLabel: m.anonLabel) }
+        if wasOffline { notifyRecovered(name, anonHealthy: healthy, anonLabel: m.anonLabel) }
     }
 
     private func recordBridgeSuccess(_ r: BridgeClient.Relay) {

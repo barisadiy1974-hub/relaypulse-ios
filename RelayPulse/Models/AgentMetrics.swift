@@ -25,8 +25,23 @@ struct AgentMetrics: Decodable {
     var uptime: String?
     var publicIp: String?
 
+    /// True when a watched unit that exists on the host belongs to relay software.
+    /// Only units that exist are reported (agent.py skips not-found ones), and an
+    /// older agent still reports the active ones, so this holds for both.
+    var runsRelay: Bool {
+        (anon?.services ?? [:]).keys.contains { k in
+            ["anon", "anyone", "tor"].contains { k.hasPrefix($0) }
+        }
+    }
+
     /// monitor.js / agent.py mantigi: anon "active"/"activating" VEYA dinleyen port varsa saglikli.
-    var anonHealthy: Bool {
+    ///
+    /// `expectService`: this host is known to run the watched software. When no
+    /// watched unit is found at all, that is suspicious on such a host — an older
+    /// agent drops a stopped unit instead of reporting it — but on any other server
+    /// the service check simply does not apply and must not turn the card yellow.
+    /// Without it every ordinary server with the default watch list showed yellow.
+    func anonHealthy(expectService: Bool) -> Bool {
         let state = (anon?.active ?? "").lowercased()
         if state == "active" || state == "activating" { return true }
         // BUG FIX (2026-09-22): eskiden burada kosulsuz "port varsa saglikli" deniyordu.
@@ -35,12 +50,14 @@ struct AgentMetrics: Decodable {
         // Dinlenen port ancak servis durumu HIC bilinmiyorken kanit sayilir.
         if !state.isEmpty && state != "unknown" { return false }
         if let ports = anon?.ports, !ports.isEmpty { return true }
-        return false
+        return !expectService
     }
 
     var anonLabel: String {
         let state = (anon?.active ?? "").lowercased()
-        if state.isEmpty { return anonHealthy ? "active" : "unknown" }
+        if state.isEmpty || state == "unknown" {
+            return (anon?.ports?.isEmpty == false) ? "active" : "—"
+        }
         return state
     }
 }

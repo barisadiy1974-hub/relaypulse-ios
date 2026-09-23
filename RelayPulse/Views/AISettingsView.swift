@@ -190,7 +190,7 @@ private struct CommandEditor: View {
         NavStack {
             Form {
                 TextField("Name", text: $command.name)
-                Section("Command (bash, runs as root on the relay)") {
+                Section("Command (bash, runs as root on the server)") {
                     TextEditor(text: $command.command)
                         .font(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 120)

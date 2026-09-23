@@ -12,7 +12,7 @@ struct HelpView: View {
     var body: some View {
         Form {
             Section {
-                Text("RelayPulse reads your relays over SSH, or over the metrics agent if you installed one. Nothing runs on a server of ours and no account is created.")
+                Text("RelayPulse reads your servers over SSH, or over the metrics agent if you installed one. Nothing runs on a server of ours and no account is created.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
             }
@@ -22,7 +22,7 @@ struct HelpView: View {
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
 
-                Text("Easiest: Tools › SSH key › Create a key on this phone. Then either Install on a relay with its password — used once, never stored — or copy the public key into the relay's ~/.ssh/authorized_keys yourself.")
+                Text("Easiest: Tools › SSH key › Create a key on this phone. Then either Install on a server with its password — used once, never stored — or copy the public key into the server's ~/.ssh/authorized_keys yourself.")
                     .font(.footnote)
 
                 Text("Or make it on a computer instead:")
@@ -32,9 +32,9 @@ struct HelpView: View {
                     .font(.footnote)
                 CodeRow(#"ssh-keygen -t ed25519 -f ~/.ssh/relaypulse_phone -C "relaypulse-phone" -N """#)
 
-                Text("2. Put the public half on each relay:")
+                Text("2. Put the public half on each server:")
                     .font(.footnote)
-                CodeRow("ssh-copy-id -i ~/.ssh/relaypulse_phone.pub root@YOUR.RELAY.IP")
+                CodeRow("ssh-copy-id -i ~/.ssh/relaypulse_phone.pub root@YOUR.SERVER.IP")
 
                 Text("3. Copy the private half to your clipboard, then paste it under SSH key:")
                     .font(.footnote)
@@ -53,13 +53,13 @@ struct HelpView: View {
 
             Section {
                 helpRow("Authentication refused",
-                        "The key is not in that relay's authorized_keys, or it landed under a different user. Root connects as root: the key belongs in /root/.ssh/authorized_keys.")
+                        "The key is not in that server's authorized_keys, or it landed under a different user. Root connects as root: the key belongs in /root/.ssh/authorized_keys.")
                 helpRow("The app rejects the key",
                         "It is not an unencrypted ed25519 OpenSSH key. An RSA key, a PuTTY .ppk, a key with a passphrase, or the .pub file by mistake are all refused.")
                 helpRow("Connection times out",
                         "Usually the wrong SSH port, or a firewall that does not allow the network your phone is on.")
                 helpRow("It worked, then stopped",
-                        "Some relays run fail2ban. Repeated failures ban the source address for a while, including yours.")
+                        "Some servers run fail2ban. Repeated failures ban the source address for a while, including yours.")
             } header: {
                 Text("When SSH will not connect")
             }
@@ -68,7 +68,7 @@ struct HelpView: View {
                 Text("The agent is optional. It reports more than SSH alone can — CPU, memory, disk and traffic — without opening a shell for every reading.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
-                Text("Install it from the desktop app; it generates the token itself and stores it encrypted. You never type a token by hand. On this phone you only need it if you already installed the agent on that relay.")
+                Text("Install it from the desktop app; it generates the token itself and stores it encrypted. You never type a token by hand. On this phone you only need it if you already installed the agent on that server.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
             } header: {
@@ -76,11 +76,11 @@ struct HelpView: View {
             }
 
             Section {
-                stateRow("Online", Theme.ok(scheme), "Reachable, and the relay service is running.")
-                stateRow("Warning", Theme.warn(scheme), "Reachable, but something is wrong — usually the relay service is not active.")
+                stateRow("Online", Theme.ok(scheme), "Reachable, and the watched service is running.")
+                stateRow("Warning", Theme.warn(scheme), "Reachable, but something is wrong — usually the watched service is not active.")
                 stateRow("Stale", Theme.warn(scheme), "One reading was missed. Almost always a passing network hiccup, not an outage.")
                 stateRow("Offline", Theme.err(scheme), "Several readings in a row failed. This one is real.")
-                Text("A relay with zero connections is not an error. It is running and simply carrying no traffic yet.")
+                Text("A server with zero connections is not an error. It is running and simply has no traffic yet.")
                     .font(.caption)
                     .foregroundStyle(Theme.muted(scheme))
             } header: {
@@ -88,7 +88,7 @@ struct HelpView: View {
             }
 
             Section {
-                Text("RelayPulse watches up to \(FleetStore.freeRelayLimit) relays free, with nothing held back and nothing that expires. One purchase lifts the limit for the whole fleet.")
+                Text("RelayPulse watches up to \(FleetStore.freeRelayLimit) servers free, with nothing held back and nothing that expires. One purchase lifts the limit for the whole fleet.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
                 Text("The purchase covers iPhone and Mac together. If you bought it on one, use Restore Purchases on the other with the same Apple Account.")

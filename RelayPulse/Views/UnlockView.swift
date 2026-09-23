@@ -24,8 +24,8 @@ struct UnlockView: View {
                         .font(.title.bold())
                         .foregroundStyle(Theme.text(scheme))
                     Text(purchases.isTrialActive
-                         ? "Your full-fleet preview ends \(purchases.trialEndsAt!.formatted(date: .abbreviated, time: .omitted)).\nAfter that, \(FleetStore.freeRelayLimit) relays stay free."
-                         : "RelayPulse watches up to \(FleetStore.freeRelayLimit) relays for free.\nUnlock it once to monitor your whole fleet.")
+                         ? "Your full-fleet preview ends \(purchases.trialEndsAt!.formatted(date: .abbreviated, time: .omitted)).\nAfter that, \(FleetStore.freeRelayLimit) servers stay free."
+                         : "RelayPulse watches up to \(FleetStore.freeRelayLimit) servers for free.\nUnlock it once to monitor your whole fleet.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.muted(scheme))
                         .multilineTextAlignment(.center)
@@ -50,7 +50,7 @@ struct UnlockView: View {
                     }
                     .disabled(busy)
 
-                    Button(purchases.isTrialActive ? "Keep using full-fleet preview" : "Continue with \(FleetStore.freeRelayLimit) relays") { dismiss() }
+                    Button(purchases.isTrialActive ? "Keep using full-fleet preview" : "Continue with \(FleetStore.freeRelayLimit) servers") { dismiss() }
                         .font(.footnote)
 
                     if let message = purchases.errorMessage {

@@ -2,7 +2,7 @@
 "relay.fixed"            = "%@ repaired";
 "relay.fixFailed"        = "%@ could not be repaired";
 "relay.offline.title"    = "%@ offline";
-"relay.offline.body"     = "Relay cannot be reached";
+"relay.offline.body"     = "Server cannot be reached";
 "relay.recovered.title"  = "%@ is back";
-"relay.recovered.body"   = "Relay is online again";
-"relay.recovered.anonDown" = "Server responding — anon: %@";
+"relay.recovered.body"   = "Server is online again";
+"relay.recovered.anonDown" = "Server responding — service: %@";

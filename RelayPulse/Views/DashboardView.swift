@@ -44,7 +44,7 @@ struct DashboardView: View {
                     if fleet.isRelayLimited {
                         HStack(spacing: 8) {
                             Image(systemName: "lock.fill")
-                            Text("Watching \(fleet.monitoredServers.count) of \(fleet.servers.count) relays")
+                            Text("Watching \(fleet.monitoredServers.count) of \(fleet.servers.count) servers")
                                 .font(.footnote.weight(.semibold))
                             Spacer()
                             Button("Unlock") { showUnlock = true }
@@ -59,10 +59,12 @@ struct DashboardView: View {
                     // A whole sweep failing at once is almost always this
                     // phone's connection. Say so, rather than letting the cards
                     // decay to red and implying the fleet went down.
-                    if fleet.networkSuspect {
+                    // Demo mode polls nothing, so a flag left over from the real
+                    // fleet would claim a network problem over sample data.
+                    if fleet.networkSuspect && !fleet.demoMode {
                         HStack(spacing: 8) {
                             Image(systemName: "wifi.exclamationmark")
-                            Text("Network problem here — readings paused, relay states kept")
+                            Text("Network problem here — readings paused, server states kept")
                                 .font(.footnote.weight(.semibold))
                             Spacer()
                         }
@@ -87,7 +89,7 @@ struct DashboardView: View {
                             Image(systemName: "server.rack")
                                 .font(.system(size: 44))
                                 .foregroundStyle(Theme.accent(scheme))
-                            Text("No relays yet")
+                            Text("No servers yet")
                                 .font(.title3.weight(.semibold))
                             Text("Add your own relay from the + button, or explore a sample fleet to see how RelayPulse works.")
                                 .font(.footnote)
@@ -130,8 +132,8 @@ struct DashboardView: View {
                 .padding(.top, 6)
             }
             .background(Theme.bg(scheme))
-            .searchable(text: $query, prompt: "Search relay or IP")
-            .navigationTitle("Relays (\(fleet.servers.count))")
+            .searchable(text: $query, prompt: "Search server or IP")
+            .navigationTitle("Servers (\(fleet.servers.count))")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if fleet.isPolling { ProgressView() }
@@ -176,7 +178,7 @@ struct FleetSummaryCard: View {
                     Label(String(format: "%.1f Mbps", totalRx), systemImage: "arrow.down")
                         .foregroundStyle(Theme.rx(scheme))
                     Spacer()
-                    Text("\(agg.total) relays")
+                    Text("\(agg.total) servers")
                         .foregroundStyle(Theme.muted(scheme))
                     Spacer()
                     Label(String(format: "%.1f Mbps", totalTx), systemImage: "arrow.up")

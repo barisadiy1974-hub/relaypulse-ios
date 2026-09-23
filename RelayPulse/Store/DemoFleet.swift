@@ -3,11 +3,11 @@ import Foundation
 /// Gerçekçi ama tamamen uydurma bir filo.
 ///
 /// İki işi var:
-///  1. App Review — inceleyen kişinin Anyone relay'i, SSH sunucusu veya Mac'i yok.
+///  1. App Review — inceleyen kişinin SSH ile erişebileceği bir sunucusu veya Mac'i yok.
 ///     Demo modu olmadan uygulamayı açıp boş bir liste görür ve hiçbir şeyi test
 ///     edemez; bu Guideline 2.1'den ret sebebidir.
-///  2. Mağaza ekran görüntüleri — gerçek filo verisi (relay adları, IP'ler,
-///     cüzdan) yayınlanmak zorunda kalmaz.
+///  2. Mağaza ekran görüntüleri — gerçek filo verisi (sunucu adları, IP'ler)
+///     yayınlanmak zorunda kalmaz.
 ///
 /// Üretilen veriler sabit bir tohumla türetilir: her açılışta aynı filo görünür,
 /// ama değerler zamanla hafifçe oynar ki ekran canlı hissettirsin.
@@ -15,18 +15,19 @@ enum DemoFleet {
 
     static let bannerText = "Demo data — not a real fleet"
 
-    /// Adlar bilerek jenerik: kimsenin gerçek relay'ine benzemesin.
+    /// Adlar bilerek jenerik ve rol adı: RelayPulse her sunucu için, tek bir yazılıma özel değil.
+    /// Masaüstündeki src/demo-fleet.js ile BİREBİR aynı tutulur.
     private static let blueprint: [(name: String, host: String, state: RelayState)] = [
-        ("relay-oslo-01",      "203.0.113.10",  .online),
-        ("relay-oslo-02",      "203.0.113.11",  .online),
-        ("relay-bergen-01",    "203.0.113.24",  .online),
-        ("relay-frankfurt-01", "198.51.100.7",  .online),
-        ("relay-frankfurt-02", "198.51.100.8",  .warn),
-        ("relay-amsterdam-01", "198.51.100.42", .online),
-        ("relay-paris-01",     "192.0.2.15",    .stale),
-        ("relay-london-01",    "192.0.2.31",    .online),
-        ("relay-madrid-01",    "192.0.2.77",    .offline),
-        ("relay-warsaw-01",    "203.0.113.90",  .online),
+        ("web-01",             "203.0.113.10",  .online),
+        ("web-02",             "203.0.113.11",  .online),
+        ("api-01",             "203.0.113.24",  .online),
+        ("db-01",              "198.51.100.7",  .online),
+        ("db-02",              "198.51.100.8",  .warn),
+        ("cache-01",           "198.51.100.42", .online),
+        ("worker-01",          "192.0.2.15",    .stale),
+        ("worker-02",          "192.0.2.31",    .online),
+        ("backup-01",          "192.0.2.77",    .offline),
+        ("mail-01",            "203.0.113.90",  .online),
     ]
 
     static var servers: [Server] {

@@ -98,17 +98,17 @@ struct SettingsView: View {
                 })
                 if !fleet.demoMode {
                     Button { showAdd = true } label: {
-                        Label("Add relay", systemImage: "plus")
+                        Label("Add server", systemImage: "plus")
                     }
                     Button { showPicker = true } label: {
                         Label("Import JSON", systemImage: "square.and.arrow.down")
                     }
                 }
             } header: {
-                Text("Relays (\(fleet.servers.count))")
+                Text("Servers (\(fleet.servers.count))")
             } footer: {
                 if fleet.demoMode {
-                    Text("These are sample relays. Turn off demo data below to edit your own fleet.")
+                    Text("These are sample servers. Turn off demo data below to edit your own fleet.")
                 }
             }
 
@@ -128,7 +128,7 @@ struct SettingsView: View {
                         Label("Try demo fleet", systemImage: "eye.fill")
                     }
                 }
-                Text("Fills the app with a sample fleet so you can look around before adding your own relays. No relay is contacted while this is on.")
+                Text("Fills the app with a sample fleet so you can look around before adding your own servers. No server is contacted while this is on.")
                     .font(.footnote).foregroundStyle(Theme.muted(scheme))
             } header: {
                 Text("Try it out")
@@ -180,7 +180,7 @@ struct SettingsView: View {
             } header: {
                 Text("Agent security")
             } footer: {
-                Text("Relay agents use self-signed certificates, so RelayPulse remembers each agent's key the first time it answers and refuses anything else — otherwise a machine on the network in between could collect your agent tokens. Reset this only after reinstalling an agent; the next poll learns the new keys.")
+                Text("Agents use self-signed certificates, so RelayPulse remembers each agent's key the first time it answers and refuses anything else — otherwise a machine on the network in between could collect your agent tokens. Reset this only after reinstalling an agent; the next poll learns the new keys.")
             }
             .onAppear { pinCount = CertPin.count }
 
@@ -193,11 +193,11 @@ struct SettingsView: View {
                     LabeledRow("Status", value: "RelayPulse Lifetime")
                 } else if let trialEndsAt = purchases.trialEndsAt {
                     LabeledRow("Status", value: "Full fleet preview — ends \(trialEndsAt.formatted(date: .abbreviated, time: .omitted))")
-                    Text("After the preview, \(FleetStore.freeRelayLimit) relays remain free. Purchase once to monitor your whole fleet.")
+                    Text("After the preview, \(FleetStore.freeRelayLimit) servers remain free. Purchase once to monitor your whole fleet.")
                         .font(.footnote)
                         .foregroundStyle(Theme.muted(scheme))
                 } else {
-                    LabeledRow("Status", value: "Free — up to \(FleetStore.freeRelayLimit) relays")
+                    LabeledRow("Status", value: "Free — up to \(FleetStore.freeRelayLimit) servers")
                 }
                 // Nothing left to sell once they own it — offering the button
                 // anyway sends an owner into a purchase StoreKit will refuse.
@@ -245,7 +245,7 @@ struct SettingsView: View {
                 // a disabled row here still drew as a live control.
                 if !fleet.demoMode {
                     Button(role: .destructive) { showClearConfirm = true } label: {
-                        Label("Remove all relays", systemImage: "trash")
+                        Label("Remove all servers", systemImage: "trash")
                     }
                 }
                 NavigationLink {
@@ -273,7 +273,7 @@ struct SettingsView: View {
                 error = SSHRunner.describe(e)
             }
         }
-        .confirmationDialog("Remove every relay definition?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+        .confirmationDialog("Remove every server definition?", isPresented: $showClearConfirm, titleVisibility: .visible) {
             Button("Remove", role: .destructive) { fleet.clearConfig() }
             Button("Cancel", role: .cancel) {}
         }

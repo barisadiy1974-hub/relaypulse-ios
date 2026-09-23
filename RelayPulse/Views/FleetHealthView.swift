@@ -61,7 +61,7 @@ struct FleetHealthView: View {
                         PanelCard(stateColor: Theme.ok(scheme)) {
                             HStack(spacing: 10) {
                                 Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.ok(scheme))
-                                Text("All relays healthy")
+                                Text("All servers healthy")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(Theme.text(scheme))
                             }
@@ -89,7 +89,7 @@ struct FleetHealthView: View {
                         section("CPU high (≥80%)") { list(cpuHot) { "\(Int($0.cpuPct ?? 0))%" } }
                     }
                     if !busiest.isEmpty {
-                        section("Busiest 5 relays") {
+                        section("Busiest 5 servers") {
                             list(busiest) { String(format: "%.1f Mbps", ($0.rxMbps ?? 0) + ($0.txMbps ?? 0)) }
                         }
                     }
@@ -133,7 +133,7 @@ struct FleetHealthView: View {
             Circle().fill(st.state.color(scheme)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(s.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text(scheme))
-                Text(st.lastError ?? (st.anonHealthy ? st.state.label : "anon: \(st.anonLabel)"))
+                Text(st.lastError ?? (st.anonHealthy ? st.state.label : "service: \(st.anonLabel)"))
                     .font(.caption2).foregroundStyle(Theme.muted(scheme)).lineLimit(1)
             }
             Spacer()

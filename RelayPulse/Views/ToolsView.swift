@@ -10,18 +10,20 @@ struct ToolsView: View {
     var body: some View {
         List {
             Section("Tools") {
-                ForEach(ToolRunnerView.Kind.allCases) { k in
+                ForEach(ToolRunnerView.Kind.allCases.filter { $0 != .nyx || fleet.hasRelays }) { k in
                     NavigationLink {
                         ToolRunnerView(kind: k)
                     } label: {
                         row(k.title, k.subtitle, k.icon, Theme.accent(scheme))
                     }
                 }
-                NavigationLink {
-                    AnonrcPickerView()
-                } label: {
-                    row("Config (anonrc)", "Read and write the relay configuration",
-                        "slider.horizontal.3", Theme.accent(scheme))
+                if fleet.hasRelays {
+                    NavigationLink {
+                        AnonrcPickerView()
+                    } label: {
+                        row("Config (anonrc)", "Read and write the relay configuration",
+                            "slider.horizontal.3", Theme.accent(scheme))
+                    }
                 }
             }
 
@@ -52,7 +54,7 @@ struct ToolsView: View {
                 NavigationLink {
                     HelpView()
                 } label: {
-                    row("Help", "Making an SSH key, what the colours mean, why a relay will not connect",
+                    row("Help", "Making an SSH key, what the colours mean, why a server will not connect",
                         "questionmark.circle", Theme.accent(scheme))
                 }
             }
@@ -72,9 +74,9 @@ struct ToolsView: View {
                     }
                 }
             } header: {
-                Text("Per relay")
+                Text("Per server")
             } footer: {
-                Text("Every tool plus the fix commands, scoped to one relay.")
+                Text("Every tool plus the fix commands, scoped to one server.")
             }
         }
         .navigationTitle("Tools")

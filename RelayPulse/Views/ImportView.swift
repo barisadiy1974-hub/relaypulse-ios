@@ -21,7 +21,7 @@ struct ImportView: View {
                 Text("RelayPulse")
                     .font(.largeTitle.bold())
                     .foregroundStyle(Theme.text(scheme))
-                Text("Monitor your Anyone relay fleet. Add a relay to get started.")
+                Text("Monitor every Linux server you run. Add a server to get started.")
                     .font(.callout)
                     .foregroundStyle(Theme.muted(scheme))
                     .multilineTextAlignment(.center)
@@ -31,7 +31,7 @@ struct ImportView: View {
                     Button {
                         showAdd = true
                     } label: {
-                        Label("Add relay", systemImage: "plus")
+                        Label("Add server", systemImage: "plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -61,7 +61,7 @@ struct ImportView: View {
                     .buttonStyle(.bordered)
                     .padding(.top, 8)
 
-                    Text("Fills the app with a sample fleet so you can look around before adding your own relays.")
+                    Text("Fills the app with a sample fleet so you can look around before adding your own servers.")
                         .font(.caption)
                         .foregroundStyle(Theme.muted(scheme))
                         .multilineTextAlignment(.center)

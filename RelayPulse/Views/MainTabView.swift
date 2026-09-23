@@ -13,19 +13,24 @@ struct MainTabView: View {
         NavStack {
             List {
                 Section {
-                    row("Relays", "antenna.radiowaves.left.and.right",
+                    row("Servers", "server.rack",
                         badge: fleet.servers.count) { DashboardView() }
                 }
 
                 Section {
-                    row("Nyx", "chart.xyaxis.line") { ToolRunnerView(kind: .nyx) }
+                    // Relay tools only for fleets that actually run relay software.
+                    if fleet.hasRelays {
+                        row("Nyx", "chart.xyaxis.line") { ToolRunnerView(kind: .nyx) }
+                    }
                     row("Htop", "cpu") { ToolRunnerView(kind: .htop) }
                     row("Fleet Health", "waveform.path.ecg") { FleetHealthView() }
                     row("Tools", "wrench.and.screwdriver") { ToolsView() }
                 }
 
                 Section {
-                    row("Relay Config", "doc.badge.gearshape") { RelayConfigView() }
+                    if fleet.hasRelays {
+                        row("Relay Config", "doc.badge.gearshape") { RelayConfigView() }
+                    }
                     row("Settings", "gearshape") { SettingsView() }
                 }
             }

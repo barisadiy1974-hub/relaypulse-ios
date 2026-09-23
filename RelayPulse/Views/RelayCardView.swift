@@ -23,7 +23,7 @@ struct RelayCardView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(sc)
                     if status.state == .online && !status.anonHealthy {
-                        StatePill(text: "anon", color: Theme.warn(scheme))
+                        StatePill(text: "service", color: Theme.warn(scheme))
                     }
                 }
 
@@ -44,7 +44,7 @@ struct RelayCardView: View {
                         .lineLimit(2)
                 } else {
                     HStack(spacing: 0) {
-                        metric("anon", status.anonLabel, status.anonHealthy ? Theme.ok(scheme) : Theme.warn(scheme))
+                        metric("service", status.anonLabel, status.anonHealthy ? Theme.ok(scheme) : Theme.warn(scheme))
                         metric("conn", status.conn.map { "\($0)" } ?? "—", Theme.text(scheme))
                         metric("↓ Mbps", fmt(status.rxMbps), Theme.rx(scheme))
                         metric("↑ Mbps", fmt(status.txMbps), Theme.tx(scheme))

@@ -13,11 +13,11 @@ extension Notification.Name {
 /// app, which runs the first auto-fix command over SSH.
 @available(iOS 17.0, *)
 struct FixRelayIntent: AppIntent {
-    static var title: LocalizedStringResource = "Relay'i onar"
+    static var title: LocalizedStringResource = "Fix server"
     /// The fix is an SSH session; it belongs in the app, not the extension.
     static var openAppWhenRun: Bool = true
 
-    @Parameter(title: "Relay")
+    @Parameter(title: "Server")
     var relay: String
 
     init() {}

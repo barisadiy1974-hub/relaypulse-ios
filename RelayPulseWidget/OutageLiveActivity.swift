@@ -26,8 +26,8 @@ struct OutageLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     Text(ctx.state.worstName).font(.headline).foregroundStyle(.white)
                     Text(ctx.state.offlineCount > 1
-                         ? "\(ctx.state.offlineCount) relay çevrimdışı"
-                         : "Relay çevrimdışı")
+                         ? "\(ctx.state.offlineCount) servers offline"
+                         : "Server offline")
                         .font(.caption).foregroundStyle(dim)
                 }
             } compactLeading: {
@@ -48,7 +48,7 @@ struct OutageLiveActivity: Widget {
                 .font(.title2).foregroundStyle(err)
             VStack(alignment: .leading, spacing: 2) {
                 Text(st.worstName).font(.headline).foregroundStyle(.white)
-                Text(st.offlineCount > 1 ? "\(st.offlineCount) relay çevrimdışı" : "Çevrimdışı")
+                Text(st.offlineCount > 1 ? "\(st.offlineCount) servers offline" : "Offline")
                     .font(.caption).foregroundStyle(dim)
             }
             Spacer()

@@ -11,7 +11,7 @@ struct ToolRunnerView: View {
             switch self {
             case .nyx:   return "Nyx"
             case .htop:  return "htop"
-            case .log:   return "anon log"
+            case .log:   return "Service log"
             case .https: return "HTTPS agent check"
             }
         }
@@ -19,7 +19,7 @@ struct ToolRunnerView: View {
             switch self {
             case .nyx:   return "Version, uptime, traffic, consensus flags, weight, connections"
             case .htop:  return "Load, top CPU/memory processes, disk"
-            case .log:   return "journalctl -u anon -n 60"
+            case .log:   return "journalctl for the watched service"
             case .https: return "Is the agent on :19191 reachable"
             }
         }
@@ -61,7 +61,7 @@ struct ToolRunnerView: View {
         Form {
             if fixedServer == nil {
                 Section("Server") {
-                    Picker("Relay", selection: $selected) {
+                    Picker("Server", selection: $selected) {
                         ForEach(fleet.servers) { s in Text(s.name).tag(s.name) }
                     }
                 }
@@ -121,7 +121,7 @@ struct AnonrcPickerView: View {
     var body: some View {
         Form {
             Section("Server") {
-                Picker("Relay", selection: $selected) {
+                Picker("Server", selection: $selected) {
                     ForEach(fleet.servers) { s in Text(s.name).tag(s.name) }
                 }
             }

@@ -31,8 +31,8 @@ struct ServerEditView: View {
     var body: some View {
         NavStack {
             Form {
-                Section("Relay") {
-                    LabeledField("Name", text: $name, placeholder: "relay-01")
+                Section("Server") {
+                    LabeledField("Name", text: $name, placeholder: "server-01")
                     LabeledField("Host / IP", text: $host, placeholder: "203.0.113.10")
                         .keyboardType(.URL)
                     HStack {
@@ -65,7 +65,7 @@ struct ServerEditView: View {
                 } header: {
                     Text("Agent token")
                 } footer: {
-                    Text("The AGENT_TOKEN of the metrics agent running on the relay. Leave empty if the agent requires no token.")
+                    Text("The AGENT_TOKEN of the metrics agent running on the server. Leave empty if the agent requires no token.")
                 }
 
                 Section {
@@ -92,12 +92,12 @@ struct ServerEditView: View {
                 if case .edit = mode {
                     Section {
                         Button(role: .destructive) { showDelete = true } label: {
-                            Label("Delete this relay", systemImage: "trash")
+                            Label("Delete this server", systemImage: "trash")
                         }
                     }
                 }
             }
-            .navigationTitle(isEdit ? "Edit relay" : "Add relay")
+            .navigationTitle(isEdit ? "Edit server" : "Add server")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -146,12 +146,12 @@ struct ServerEditView: View {
         switch mode {
         case .add:
             guard fleet.addServer(s) else {
-                error = "A relay with that name already exists."
+                error = "A server with that name already exists."
                 return
             }
         case .edit:
             guard fleet.updateServer(s, originalName: originalName ?? s.name) else {
-                error = "A relay with that name already exists."
+                error = "A server with that name already exists."
                 return
             }
         }

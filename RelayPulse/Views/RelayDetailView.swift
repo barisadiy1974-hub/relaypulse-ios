@@ -53,17 +53,20 @@ struct RelayDetailView: View {
                 // Quick actions, same set as the desktop relay card.
                 PanelCard {
                     HStack(spacing: 8) {
-                        actionLink(.nyx, "Nyx")
+                        let relay = fleet.relayHosts.contains(server.name)
+                        if relay { actionLink(.nyx, "Nyx") }
                         actionLink(.log, "Log")
                         actionLink(.https, "HTTPS")
-                        NavigationLink {
-                            AnonrcEditorView(server: server)
-                        } label: { actionLabel("Config", "slider.horizontal.3") }
+                        if relay {
+                            NavigationLink {
+                                AnonrcEditorView(server: server)
+                            } label: { actionLabel("Config", "slider.horizontal.3") }
+                        }
                     }
                 }
 
                 infoCard("Metrics", [
-                    ("anon service", status.anonLabel),
+                    ("Service", status.anonLabel),
                     ("Connections", status.conn.map { "\($0)" } ?? "—"),
                     ("Download", mbps(status.rxMbps)),
                     ("Upload", mbps(status.txMbps)),
@@ -119,7 +122,7 @@ struct RelayDetailView: View {
     private func diagnose() async {
         diagnosing = true
         defer { diagnosing = false }
-        let errMsg = status.lastError ?? (status.anonHealthy ? "state: \(status.state.rawValue)" : "anon service \(status.anonLabel)")
+        let errMsg = status.lastError ?? (status.anonHealthy ? "state: \(status.state.rawValue)" : "service \(status.anonLabel)")
 
         var logs = "(no logs)"
         do {

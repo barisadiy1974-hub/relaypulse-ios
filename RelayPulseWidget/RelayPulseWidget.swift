@@ -10,7 +10,7 @@ struct Entry: TimelineEntry {
 struct Provider: TimelineProvider {
     func placeholder(in: Context) -> Entry {
         Entry(date: Date(), s: FleetSummary(total: 143, online: 141, warn: 1, stale: 0, offline: 1,
-                                            worstName: "relay-08", worstError: "SSH yok",
+                                            worstName: "web-01", worstError: "No SSH",
                                             worstSince: Date().addingTimeInterval(-1560),
                                             history: [140, 141, 141, 139, 142, 143, 143, 141, 141]))
     }

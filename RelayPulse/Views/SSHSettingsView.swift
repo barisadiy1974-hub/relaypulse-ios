@@ -71,13 +71,13 @@ struct SSHSettingsView: View {
                     }
                     if !fleet.servers.isEmpty {
                         Button { showInstall = true } label: {
-                            Label("Install on a relay with its password", systemImage: "arrow.up.doc")
+                            Label("Install on a server with its password", systemImage: "arrow.up.doc")
                         }
                     }
                 } header: {
                     Text("Public key")
                 } footer: {
-                    Text("This line goes into ~/.ssh/authorized_keys on each relay. Paste it there yourself, or let the app put it there using the relay's root password once — the password is used for that single login and never stored.")
+                    Text("This line goes into ~/.ssh/authorized_keys on each server. Paste it there yourself, or let the app put it there using the server's root password once — the password is used for that single login and never stored.")
                 }
             }
 
@@ -174,7 +174,7 @@ private struct InstallKeyView: View {
         NavStack {
             Form {
                 Section {
-                    Picker("Relay", selection: $serverID) {
+                    Picker("Server", selection: $serverID) {
                         ForEach(fleet.servers) { s in Text(s.name).tag(s.id) }
                     }
                     SecureField("Root password", text: $password)
@@ -226,7 +226,7 @@ private struct InstallKeyView: View {
         do {
             let r = try await SSHRunner.shared.run(command, on: server, password: pw, timeout: 20)
             guard r.stdout.contains("KEY_INSTALLED") else {
-                result = "The relay did not confirm the key was added.\n\(r.combined)"
+                result = "The server did not confirm the key was added.\n\(r.combined)"
                 return
             }
         } catch SSHError.auth {
