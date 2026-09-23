@@ -157,7 +157,7 @@ enum RelayScripts {
             print("\n(control port error: %s)" % e)
 
     print("\n=== PORTS ===")
-    print(sh("ss -tnlp 2>/dev/null | grep -E ':(9001|9030|9050|9051|443)\\b'") or "(no relay port listening)")
+    print(sh("ss -tunlp 2>/dev/null | grep -E ':(9001|9030|9050|9051|443)\\b'") or "(no relay port listening)")
     print("Established connections: " + (sh("ss -tn state established 2>/dev/null | tail -n +2 | wc -l") or "?"))
 
     print("\n=== CONFIG (/etc/anon/anonrc) ===")
