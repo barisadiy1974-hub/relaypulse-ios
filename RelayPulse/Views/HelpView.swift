@@ -22,6 +22,12 @@ struct HelpView: View {
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
 
+                Text("Easiest: Tools › SSH key › Create a key on this phone. Then either Install on a relay with its password — used once, never stored — or copy the public key into the relay's ~/.ssh/authorized_keys yourself.")
+                    .font(.footnote)
+
+                Text("Or make it on a computer instead:")
+                    .font(.footnote.weight(.semibold))
+
                 Text("1. On your Mac or PC, create the key:")
                     .font(.footnote)
                 CodeRow(#"ssh-keygen -t ed25519 -f ~/.ssh/relaypulse_phone -C "relaypulse-phone" -N """#)

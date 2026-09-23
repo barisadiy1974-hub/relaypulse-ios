@@ -47,8 +47,22 @@ actor SSHRunner {
         guard !pem.isEmpty else { throw SSHError.noKey }
         let key = try OpenSSHKey.ed25519(fromPEM: pem)
         let user = server.sshUser.isEmpty ? "root" : server.sshUser
+        return try await execute(command, on: server, auth: PrivateKeyAuth(username: user, key: key), timeout: timeout)
+    }
 
-        let auth = PrivateKeyAuth(username: user, key: key)
+    /// Password login, for exactly one job: putting this phone's public key on a
+    /// relay that so far only knows its root password (what most VPS providers
+    /// hand out). The password exists for the length of this call and is never
+    /// written anywhere; everything afterwards goes through the key.
+    func run(_ command: String, on server: Server, password: String, timeout: TimeInterval = 25) async throws -> SSHResult {
+        guard !UserDefaults.standard.bool(forKey: "demoMode") else { throw SSHError.demo }
+        let user = server.sshUser.isEmpty ? "root" : server.sshUser
+        return try await execute(command, on: server, auth: PasswordAuth(username: user, password: password), timeout: timeout)
+    }
+
+    private func execute(_ command: String, on server: Server,
+                         auth: NIOSSHClientUserAuthenticationDelegate,
+                         timeout: TimeInterval) async throws -> SSHResult {
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(.seconds(12))
             .channelInitializer { channel in
@@ -179,6 +193,33 @@ private final class PrivateKeyAuth: NIOSSHClientUserAuthenticationDelegate {
         offered = true
         nextChallengePromise.succeed(
             NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: key)))
+        )
+    }
+}
+
+/// Offered once, like the key: a second try with the same wrong password only
+/// feeds fail2ban. Servers that allow passwords solely through
+/// keyboard-interactive (PAM) are not reachable this way — swift-nio-ssh does
+/// not implement that method — and fail as .auth.
+private final class PasswordAuth: NIOSSHClientUserAuthenticationDelegate {
+    private let username: String
+    private let password: String
+    private var offered = false
+
+    init(username: String, password: String) {
+        self.username = username
+        self.password = password
+    }
+
+    func nextAuthenticationType(availableMethods: NIOSSHAvailableUserAuthenticationMethods,
+                                nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>) {
+        guard availableMethods.contains(.password), !offered else {
+            nextChallengePromise.succeed(nil)
+            return
+        }
+        offered = true
+        nextChallengePromise.succeed(
+            NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .password(.init(password: password)))
         )
     }
 }

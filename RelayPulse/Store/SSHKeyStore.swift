@@ -15,6 +15,34 @@ enum SSHKeyStore {
 
     static func clear() { Keychain.delete("sshPrivateKey") }
 
+    /// Same comment the website's ssh-keygen line uses, so one `sed` removes
+    /// the phone key from a relay however it was made.
+    static let comment = "relaypulse-phone"
+
+    /// Makes the key on the phone itself, so the private half never has to
+    /// travel from a computer. Never replaces a loaded key.
+    static func generate() throws {
+        guard !hasKey else { return }
+        try store(OpenSSHKey.pem(Curve25519.Signing.PrivateKey(), comment: comment))
+    }
+
+    /// The line that goes into a relay's authorized_keys.
+    static var publicKeyLine: String? {
+        guard let key = try? OpenSSHKey.curve25519(fromPEM: pem) else { return nil }
+        return OpenSSHKey.publicLine(key.publicKey, comment: comment)
+    }
+
+    /// Appends the public key unless it is already there. The line is base64
+    /// plus a fixed comment, so it is safe inside single quotes.
+    static var installCommand: String? {
+        guard let line = publicKeyLine else { return nil }
+        return """
+        umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && \
+        { grep -qxF '\(line)' ~/.ssh/authorized_keys || echo '\(line)' >> ~/.ssh/authorized_keys; } && \
+        chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && echo KEY_INSTALLED
+        """
+    }
+
     /// SHA256 fingerprint of the key (same format as `ssh-keygen -lf`).
     static var fingerprint: String? {
         guard let key = try? OpenSSHKey.curve25519(fromPEM: pem) else { return nil }

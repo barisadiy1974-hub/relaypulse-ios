@@ -62,6 +62,52 @@ enum OpenSSHKey {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: secret.prefix(32))
     }
 
+    // MARK: - Writing
+
+    /// The `authorized_keys` line for a key: "ssh-ed25519 <base64> <comment>".
+    static func publicLine(_ key: Curve25519.Signing.PublicKey, comment: String) -> String {
+        "ssh-ed25519 \(publicBlob(key).base64EncodedString()) \(comment)"
+    }
+
+    /// Unencrypted "openssh-key-v1" PEM — the same thing
+    /// `ssh-keygen -t ed25519 -N ""` writes, so the reader above takes it back.
+    static func pem(_ key: Curve25519.Signing.PrivateKey, comment: String) -> String {
+        let pub = key.publicKey.rawRepresentation
+        var priv = Data()
+        let check = UInt32.random(in: .min ... .max)
+        priv.u32(check); priv.u32(check)
+        priv.str(Data("ssh-ed25519".utf8))
+        priv.str(pub)
+        priv.str(key.rawRepresentation + pub)          // seed(32) || public(32)
+        priv.str(Data(comment.utf8))
+        var pad: UInt8 = 1
+        while priv.count % 8 != 0 { priv.append(pad); pad += 1 }
+
+        var blob = Data("openssh-key-v1\0".utf8)
+        blob.str(Data("none".utf8))                    // cipher
+        blob.str(Data("none".utf8))                    // kdf
+        blob.str(Data())                               // kdf options
+        blob.u32(1)                                    // key count
+        blob.str(publicBlob(key.publicKey))
+        blob.str(priv)
+
+        let b64 = blob.base64EncodedString()
+        let lines = stride(from: 0, to: b64.count, by: 70).map { i -> String in
+            let s = b64.index(b64.startIndex, offsetBy: i)
+            let e = b64.index(s, offsetBy: 70, limitedBy: b64.endIndex) ?? b64.endIndex
+            return String(b64[s..<e])
+        }
+        return (["-----BEGIN OPENSSH PRIVATE KEY-----"] + lines + ["-----END OPENSSH PRIVATE KEY-----"])
+            .joined(separator: "\n") + "\n"
+    }
+
+    private static func publicBlob(_ key: Curve25519.Signing.PublicKey) -> Data {
+        var d = Data()
+        d.str(Data("ssh-ed25519".utf8))
+        d.str(key.rawRepresentation)
+        return d
+    }
+
     // MARK: - Big-endian reader
 
     private struct Reader {
@@ -86,4 +132,9 @@ enum OpenSSHKey {
             String(decoding: try bytes(), as: UTF8.self)
         }
     }
+}
+
+private extension Data {
+    mutating func u32(_ v: UInt32) { Swift.withUnsafeBytes(of: v.bigEndian) { append(contentsOf: $0) } }
+    mutating func str(_ d: Data) { u32(UInt32(d.count)); append(d) }
 }
