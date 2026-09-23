@@ -191,6 +191,11 @@ struct SettingsView: View {
             Section("License") {
                 if purchases.isEntitled {
                     LabeledRow("Status", value: "RelayPulse Lifetime")
+                } else if let trialEndsAt = purchases.trialEndsAt {
+                    LabeledRow("Status", value: "Full fleet preview — ends \(trialEndsAt.formatted(date: .abbreviated, time: .omitted))")
+                    Text("After the preview, \(FleetStore.freeRelayLimit) relays remain free. Purchase once to monitor your whole fleet.")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.muted(scheme))
                 } else {
                     LabeledRow("Status", value: "Free — up to \(FleetStore.freeRelayLimit) relays")
                 }

@@ -1,13 +1,15 @@
 import Foundation
 import StoreKit
 
-/// StoreKit 2 entitlement for the iOS app. There is no trial: the app is free
-/// for a small fleet and the purchase lifts that limit, so nothing here can ever
-/// lock someone out.
+/// StoreKit 2 entitlement for the iOS app. A seven-day full-fleet preview
+/// falls back to the permanent free three-relay tier; purchase lifts the limit.
 /// The matching non-consumable product must be created in App Store Connect.
 @MainActor
 final class PurchaseStore: ObservableObject {
     static let productID = "com.baris.relaypulse.pro.lifetime"
+    private static let previewStartKey = "fullFleetPreviewStartedAt"
+    // ponytail: device-local timing is not cross-device fraud prevention; add account-backed entitlement only if that becomes necessary.
+    private static let previewDuration: TimeInterval = 7 * 24 * 60 * 60
 
     /// Son dogrulanan hak, acilista hemen bilinsin diye onbellekte tutulur.
     /// Onbelleksiz her soguk acilista StoreKit cevap verene kadar izlenen filo
@@ -26,11 +28,17 @@ final class PurchaseStore: ObservableObject {
             #endif
         }
     }
+    @Published private(set) var trialEndsAt: Date?
     @Published private(set) var errorMessage: String?
 
     private var updatesTask: Task<Void, Never>?
+    private var trialExpiryTask: Task<Void, Never>?
+
+    var hasFullFleetAccess: Bool { isEntitled || trialEndsAt != nil }
+    var isTrialActive: Bool { !isEntitled && trialEndsAt != nil }
 
     init() {
+        refreshTrialWindow()
         updatesTask = Task { [weak self] in
             for await result in Transaction.updates {
                 guard let self else { return }
@@ -39,10 +47,14 @@ final class PurchaseStore: ObservableObject {
         }
     }
 
-    deinit { updatesTask?.cancel() }
+    deinit {
+        updatesTask?.cancel()
+        trialExpiryTask?.cancel()
+    }
 
     func start() async {
         await refreshEntitlement()
+        refreshTrialWindow()
         do {
             product = try await Product.products(for: [Self.productID]).first
             // Bos liste HATA FIRLATMIYOR: urun gelmeyince product sessizce nil kaliyor
@@ -105,8 +117,7 @@ final class PurchaseStore: ObservableObject {
         #if DEBUG
         // Gelistirici derlemesi magaza makbuzu tasimaz; kendi telefonda tam filo icin.
         isEntitled = true
-        return
-        #endif
+        #else
         var entitled = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
@@ -116,13 +127,46 @@ final class PurchaseStore: ObservableObject {
             }
         }
         isEntitled = entitled
+        #endif
     }
 
     private func handle(_ result: VerificationResult<Transaction>) async {
         guard case .verified(let transaction) = result else { return }
         if transaction.productID == Self.productID {
             isEntitled = transaction.revocationDate == nil
+            refreshTrialWindow()
         }
         await transaction.finish()
+    }
+
+    private func refreshTrialWindow() {
+        trialExpiryTask?.cancel()
+        guard !isEntitled else {
+            trialEndsAt = nil
+            return
+        }
+
+        let now = Date()
+        let startedAt: Date
+        if let timestamp = TimeInterval(Keychain.get(Self.previewStartKey)) {
+            startedAt = Date(timeIntervalSince1970: timestamp)
+        } else {
+            startedAt = now
+            Keychain.set(String(startedAt.timeIntervalSince1970), for: Self.previewStartKey)
+        }
+
+        let endsAt = startedAt.addingTimeInterval(Self.previewDuration)
+        guard endsAt > now else {
+            trialEndsAt = nil
+            return
+        }
+
+        trialEndsAt = endsAt
+        let wait = UInt64((endsAt.timeIntervalSince(now) * 1_000_000_000).rounded(.up))
+        trialExpiryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: wait)
+            guard !Task.isCancelled else { return }
+            self?.trialEndsAt = nil
+        }
     }
 }

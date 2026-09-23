@@ -89,7 +89,7 @@ struct DashboardView: View {
                                 .foregroundStyle(Theme.accent(scheme))
                             Text("No relays yet")
                                 .font(.title3.weight(.semibold))
-                            Text("Add your own Anyone relay from the + button, or explore a sample fleet to see how RelayPulse works.")
+                            Text("Add your own relay from the + button, or explore a sample fleet to see how RelayPulse works.")
                                 .font(.footnote)
                                 .foregroundStyle(Theme.muted(scheme))
                                 .multilineTextAlignment(.center)
