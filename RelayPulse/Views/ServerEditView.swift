@@ -14,7 +14,7 @@ struct ServerEditView: View {
 
     @State private var name = ""
     @State private var host = ""
-    @State private var port = "19191"
+    @State private var port = "0"
     @State private var scheme = "https"
     @State private var token = ""
     @State private var sshUser = "root"
@@ -31,14 +31,14 @@ struct ServerEditView: View {
     var body: some View {
         NavStack {
             Form {
-                Section("Server") {
+                Section {
                     LabeledField("Name", text: $name, placeholder: "server-01")
                     LabeledField("Host / IP", text: $host, placeholder: "203.0.113.10")
                         .keyboardType(.URL)
                     HStack {
                         Text("Agent port").foregroundStyle(.secondary)
                         Spacer()
-                        TextField("19191", text: $port)
+                        TextField("0", text: $port)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 90)
@@ -47,6 +47,10 @@ struct ServerEditView: View {
                         Text("HTTPS").tag("https")
                         Text("HTTP").tag("http")
                     }
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("Agent port 0: no agent needed — the server is read over SSH with your key, and nothing is installed on it. If you installed the RelayPulse agent from the desktop app, enter its port (usually 19191).")
                 }
 
                 Section {
@@ -137,7 +141,7 @@ struct ServerEditView: View {
         let s = Server(
             name: name.trimmingCharacters(in: .whitespaces),
             host: host.trimmingCharacters(in: .whitespaces),
-            agentPort: Int(port) ?? 19191,
+            agentPort: Int(port) ?? 0,
             agentScheme: scheme,
             agentToken: token.trimmingCharacters(in: .whitespaces),
             sshUser: sshUser.trimmingCharacters(in: .whitespaces).isEmpty ? "root" : sshUser.trimmingCharacters(in: .whitespaces),

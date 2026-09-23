@@ -13,6 +13,8 @@ struct Server: Codable, Identifiable, Hashable {
     var sshPort: Int
 
     var id: String { name }
+    /// Port 0 = no agent on this server: it is read over SSH only.
+    var usesAgent: Bool { agentPort > 0 }
 
     enum CodingKeys: String, CodingKey {
         case name, host, agentPort, agentScheme, agentToken, sshUser, sshPort

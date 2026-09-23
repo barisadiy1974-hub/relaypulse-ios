@@ -397,6 +397,11 @@ final class FleetStore: ObservableObject {
                 guard let s = iterator.next() else { return }
                 let isCritical = critical.contains(s.name)
                 group.addTask {
+                    // No agent on this server: SSH is the reading, not a fallback.
+                    if !s.usesAgent {
+                        do { return SweepOutcome(name: s.name, result: .success(try await SSHMetrics.shared.fetchDirect(s))) }
+                        catch { return SweepOutcome(name: s.name, result: .failure(error)) }
+                    }
                     do { return SweepOutcome(name: s.name, result: .success(try await AgentClient.shared.fetch(s))) }
                     catch {
                         var tokenStale = false

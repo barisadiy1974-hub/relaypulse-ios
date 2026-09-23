@@ -201,28 +201,32 @@ enum RelayScripts {
     ss -tnlp 2>/dev/null | grep 19191 || echo "(nothing listening on 19191)"
     """#
 
-    /// SSH fallback for the poll loop, used when the HTTPS agent on :19191 does
-    /// not answer. Rather than re-collecting the metrics with a separate shell
-    /// script (which would drift from the agent), it imports the agent module
-    /// already installed on the relay and calls its own `collect()`. The output
-    /// is therefore byte-for-byte the JSON the HTTP endpoint would have returned,
-    /// so `AgentMetrics` decodes it unchanged.
+    /// Reads a server over SSH with the agent's own `collect()`, so the JSON is
+    /// exactly what the HTTPS agent would return and `AgentMetrics` decodes it
+    /// unchanged. Used as the fallback when an agent does not answer, and as the
+    /// ONLY path for servers without an agent (agentPort 0).
     ///
-    /// This is what lets the phone match the desktop app: the desktop falls back
-    /// to SSH when the agent is unreachable (monitor.js), so a relay whose agent
-    /// hiccups but whose SSH is fine stays green there. Without this the phone
-    /// had only one measurement path and showed yellow for the same relay.
-    /// Reads metrics through the agent module on the server. The watched service
-    /// names are handed to it in the environment, so the same agent works for a
-    /// relay, a database, a home server or anything else with a systemd unit.
+    /// The code is not imported from the server: it travels with this command
+    /// (AgentSource, generated from the desktop repo's agent.py) and runs in
+    /// memory. BUG FIX (2026-09-23): the old script did `import agent` from
+    /// /opt/anyone-agent, which only the desktop app can install — so a server
+    /// added on the phone alone never produced a single reading. Nothing is
+    /// written to the server now; it needs sshd and python3, nothing else. It
+    /// also means every server is read by the newest collect(), not whatever
+    /// agent version happens to be installed there.
+    ///
+    /// The public-IP lookup is switched off: it calls out to an IP echo service
+    /// with up to 12 s of timeouts, which an agent caches for five minutes but a
+    /// one-shot run would repeat on every poll.
     static var metrics: String {
         """
         python3 - <<'PYEOF'
-        import sys, json, os
+        import base64, json, os, types
         os.environ['AGENT_SERVICES'] = '\(WatchTargets.servicesString)'
         os.environ['AGENT_PORTS'] = '\(WatchTargets.portsString)'
-        sys.path.insert(0, "/opt/anyone-agent")
-        import agent
+        agent = types.ModuleType('agent')
+        exec(compile(base64.b64decode('\(AgentSource.base64)').decode(), 'agent.py', 'exec'), agent.__dict__)
+        agent._pub_ip_get = lambda: ''
         print(json.dumps(agent.collect()))
         PYEOF
         """

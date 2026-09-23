@@ -64,6 +64,23 @@ actor SSHMetrics {
 
     /// Returns nil when the budget is spent, no SSH key is configured, or the
     /// relay does not answer — callers then keep the agent's original error.
+    /// The only reading path for a server without an agent, so it is not
+    /// rationed like the fallback below and it reports why it failed.
+    func fetchDirect(_ server: Server) async throws -> AgentMetrics {
+        let r = try await SSHRunner.shared.run(RelayScripts.metrics, on: server, timeout: 15)
+        guard let line = r.stdout
+            .split(separator: "\n")
+            .last(where: { $0.hasPrefix("{") && $0.hasSuffix("}") }),
+              let data = String(line).data(using: .utf8)
+        else {
+            let why = r.stderr.localizedCaseInsensitiveContains("python3") || r.stdout.isEmpty
+                ? "no readings — is python3 installed on the server?"
+                : String(r.combined.prefix(160))
+            throw SSHError.exec(why)
+        }
+        return try JSONDecoder().decode(AgentMetrics.self, from: data)
+    }
+
     func fetch(_ server: Server, critical: Bool = false) async -> AgentMetrics? {
         guard SSHKeyStore.hasKey else { return nil }
         if critical, criticalBudget > 0 {
