@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Root menu. Mirrors the Mac app's sidebar: Relays · Nyx · Htop · Fleet Health ·
-/// Tools · Relay Config · Settings.
+/// Tools · Relay Config · Settings · Help.
 ///
 /// The Mac opens Nyx/Htop in a Terminal window (they are curses programs). iOS
 /// has no terminal, so those two run the same checks natively via ToolRunnerView.
@@ -32,6 +32,7 @@ struct MainTabView: View {
                         row("Relay Config", "doc.badge.gearshape") { RelayConfigView() }
                     }
                     row("Settings", "gearshape") { SettingsView() }
+                    row("Help", "questionmark.circle") { HelpView() }
                 }
             }
             .navigationTitle("RelayPulse")
