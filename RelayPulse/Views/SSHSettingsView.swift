@@ -239,7 +239,7 @@ private struct InstallKeyView: View {
 
         // The whole point is that the key works on its own from now on.
         do {
-            _ = try await SSHRunner.shared.run("true", on: server, timeout: 15)
+            _ = try await SSHRunner.shared.run("true", on: server, timeout: 15, usePassword: false)
             ok = true
             result = "Key installed on \(server.name), and a login with the key alone works. The password is no longer needed."
         } catch {

@@ -81,9 +81,9 @@ struct ToolRunnerView: View {
                 Text(kind.subtitle)
             }
 
-            if !SSHKeyStore.hasKey {
+            if let s = server, !SSHKeyStore.canLogin(s) {
                 Section {
-                    Label("No SSH key — add one in Tools › SSH key", systemImage: "exclamationmark.triangle")
+                    Label("No SSH key or password for \(s.name) — add a key in Tools › SSH key, or the password in the server's settings", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.warn(scheme))
                         .font(.footnote)
                 }

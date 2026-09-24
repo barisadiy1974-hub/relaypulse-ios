@@ -50,7 +50,7 @@ actor SSHMetrics {
     /// otherwise be SSH'd on every sweep forever. A successful repair is
     /// self-limiting — once the stored token matches, the 403 stops.
     func repairToken(_ server: Server) async -> String? {
-        guard repairBudget > 0, SSHKeyStore.hasKey else { return nil }
+        guard repairBudget > 0, SSHKeyStore.canLogin(server) else { return nil }
         repairBudget -= 1
         guard let r = try? await SSHRunner.shared.run(RelayScripts.readAgentToken,
                                                      on: server, timeout: 12) else { return nil }
@@ -62,7 +62,7 @@ actor SSHMetrics {
         return token
     }
 
-    /// Returns nil when the budget is spent, no SSH key is configured, or the
+    /// Returns nil when the budget is spent, no SSH key or password is configured, or the
     /// relay does not answer — callers then keep the agent's original error.
     /// The only reading path for a server without an agent, so it is not
     /// rationed like the fallback below and it reports why it failed.
@@ -82,7 +82,7 @@ actor SSHMetrics {
     }
 
     func fetch(_ server: Server, critical: Bool = false) async -> AgentMetrics? {
-        guard SSHKeyStore.hasKey else { return nil }
+        guard SSHKeyStore.canLogin(server) else { return nil }
         if critical, criticalBudget > 0 {
             criticalBudget -= 1
         } else if budget > 0 {

@@ -41,7 +41,7 @@ struct ToolsView: View {
                     SSHSettingsView()
                 } label: {
                     row("SSH key",
-                        SSHKeyStore.hasKey ? "Loaded — tools work" : "Missing — tools will not run",
+                        SSHKeyStore.hasKey ? "Loaded — tools work" : "Not set — servers log in with their password",
                         "terminal",
                         SSHKeyStore.hasKey ? Theme.ok(scheme) : Theme.warn(scheme))
                 }

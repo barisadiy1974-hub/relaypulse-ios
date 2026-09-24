@@ -19,10 +19,10 @@ enum SSHError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noKey:          return "No SSH key on this phone — add one in Tools › SSH key"
+        case .noKey:          return "No way to log in — add a key in Tools › SSH key, or the server's password in its settings"
         case .demo:           return "Sample fleet — turn off Demo data in Settings to run this on a real relay."
         case .connect(let m): return "Could not connect: \(m)"
-        case .auth:           return "Authentication refused (is the key in the relay's authorized_keys?)"
+        case .auth:           return "Login refused — check the key (authorized_keys) or the server's password"
         case .exec(let m):    return "Command failed: \(m)"
         }
     }
@@ -34,7 +34,7 @@ actor SSHRunner {
     static let shared = SSHRunner()
     private let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 
-    func run(_ command: String, on server: Server, timeout: TimeInterval = 25) async throws -> SSHResult {
+    func run(_ command: String, on server: Server, timeout: TimeInterval = 25, usePassword: Bool = true) async throws -> SSHResult {
         // Demo relays carry RFC 5737 documentation addresses that nothing
         // answers. Six tool screens can reach this, and without the guard each
         // one fires a real connection and sits for the whole timeout before
@@ -43,21 +43,21 @@ actor SSHRunner {
         // UserDefaults rather than FleetStore: same key FleetStore reads and
         // writes, and it keeps the SSH layer from reaching into the UI store.
         guard !UserDefaults.standard.bool(forKey: "demoMode") else { throw SSHError.demo }
-        let pem = Keychain.get("sshPrivateKey")
-        guard !pem.isEmpty else { throw SSHError.noKey }
-        let key = try OpenSSHKey.ed25519(fromPEM: pem)
+        let pem = SSHKeyStore.pem
+        let key = pem.isEmpty ? nil : try OpenSSHKey.ed25519(fromPEM: pem)
+        let password = usePassword ? SSHKeyStore.password(for: server.name) : ""
+        guard key != nil || !password.isEmpty else { throw SSHError.noKey }
         let user = server.sshUser.isEmpty ? "root" : server.sshUser
-        return try await execute(command, on: server, auth: PrivateKeyAuth(username: user, key: key), timeout: timeout)
+        return try await execute(command, on: server,
+                                 auth: LoginAuth(username: user, key: key, password: password), timeout: timeout)
     }
 
-    /// Password login, for exactly one job: putting this phone's public key on a
-    /// relay that so far only knows its root password (what most VPS providers
-    /// hand out). The password exists for the length of this call and is never
-    /// written anywhere; everything afterwards goes through the key.
+    /// Password-only login with a password that is not stored: putting this
+    /// phone's public key on a server during "Install on a server".
     func run(_ command: String, on server: Server, password: String, timeout: TimeInterval = 25) async throws -> SSHResult {
         guard !UserDefaults.standard.bool(forKey: "demoMode") else { throw SSHError.demo }
         let user = server.sshUser.isEmpty ? "root" : server.sshUser
-        return try await execute(command, on: server, auth: PasswordAuth(username: user, password: password), timeout: timeout)
+        return try await execute(command, on: server, auth: LoginAuth(username: user, key: nil, password: password), timeout: timeout)
     }
 
     private func execute(_ command: String, on server: Server,
@@ -174,53 +174,34 @@ private final class AcceptAllHostKeys: NIOSSHClientServerAuthenticationDelegate 
     }
 }
 
-private final class PrivateKeyAuth: NIOSSHClientUserAuthenticationDelegate {
+/// Key first, then the server's password — the order `ssh` itself uses, so a
+/// server that has both behaves as it does on the desktop. Each is offered
+/// once: a second try with the same wrong password only feeds fail2ban.
+/// Servers that allow passwords solely through keyboard-interactive (PAM) are
+/// not reachable by password — swift-nio-ssh does not implement that method —
+/// and fail as .auth.
+private final class LoginAuth: NIOSSHClientUserAuthenticationDelegate {
     private let username: String
-    private let key: NIOSSHPrivateKey
-    private var offered = false
+    private var key: NIOSSHPrivateKey?
+    private var password: String?
 
-    init(username: String, key: NIOSSHPrivateKey) {
+    init(username: String, key: NIOSSHPrivateKey?, password: String) {
         self.username = username
         self.key = key
+        self.password = password.isEmpty ? nil : password
     }
 
     func nextAuthenticationType(availableMethods: NIOSSHAvailableUserAuthenticationMethods,
                                 nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>) {
-        guard availableMethods.contains(.publicKey), !offered else {
+        if let k = key, availableMethods.contains(.publicKey) {
+            key = nil
+            nextChallengePromise.succeed(.init(username: username, serviceName: "", offer: .privateKey(.init(privateKey: k))))
+        } else if let pw = password, availableMethods.contains(.password) {
+            password = nil
+            nextChallengePromise.succeed(.init(username: username, serviceName: "", offer: .password(.init(password: pw))))
+        } else {
             nextChallengePromise.succeed(nil)
-            return
         }
-        offered = true
-        nextChallengePromise.succeed(
-            NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: key)))
-        )
-    }
-}
-
-/// Offered once, like the key: a second try with the same wrong password only
-/// feeds fail2ban. Servers that allow passwords solely through
-/// keyboard-interactive (PAM) are not reachable this way — swift-nio-ssh does
-/// not implement that method — and fail as .auth.
-private final class PasswordAuth: NIOSSHClientUserAuthenticationDelegate {
-    private let username: String
-    private let password: String
-    private var offered = false
-
-    init(username: String, password: String) {
-        self.username = username
-        self.password = password
-    }
-
-    func nextAuthenticationType(availableMethods: NIOSSHAvailableUserAuthenticationMethods,
-                                nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>) {
-        guard availableMethods.contains(.password), !offered else {
-            nextChallengePromise.succeed(nil)
-            return
-        }
-        offered = true
-        nextChallengePromise.succeed(
-            NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .password(.init(password: password)))
-        )
     }
 }
 

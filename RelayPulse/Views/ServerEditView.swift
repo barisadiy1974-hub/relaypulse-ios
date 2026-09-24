@@ -19,6 +19,7 @@ struct ServerEditView: View {
     @State private var token = ""
     @State private var sshUser = "root"
     @State private var sshPort = "22"
+    @State private var sshPassword = ""
     @State private var showTokenPlain = false
     @State private var error: String?
     @State private var showDelete = false
@@ -50,7 +51,7 @@ struct ServerEditView: View {
                 } header: {
                     Text("Server")
                 } footer: {
-                    Text("Agent port 0: no agent needed — the server is read over SSH with your key, and nothing is installed on it. If you installed the RelayPulse agent from the desktop app, enter its port (usually 19191).")
+                    Text("Agent port 0: no agent needed — the server is read over SSH, and nothing is installed on it. If you installed the RelayPulse agent from the desktop app, enter its port (usually 19191).")
                 }
 
                 Section {
@@ -83,10 +84,13 @@ struct ServerEditView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 90)
                     }
+                    SecureField("Password (optional)", text: $sshPassword)
+                        .textContentType(.password)
+                        .autocorrectionDisabled().textInputAutocapitalization(.never)
                 } header: {
                     Text("SSH")
                 } footer: {
-                    Text("Used by the tools (Nyx, htop, anonrc, fix commands). The private key is shared across relays — set it in Tools › SSH key.")
+                    Text("Log in with the phone's SSH key (Tools › SSH key) or with this server's password, e.g. the root password from your VPS provider. The key is tried first. The password stays in this phone's Keychain.")
                 }
 
                 if let error {
@@ -135,6 +139,7 @@ struct ServerEditView: View {
         scheme = s.agentScheme.isEmpty ? "https" : s.agentScheme
         token = s.agentToken
         sshUser = s.sshUser; sshPort = "\(s.sshPort)"
+        sshPassword = SSHKeyStore.password(for: s.name)
     }
 
     private func save() {
@@ -159,6 +164,7 @@ struct ServerEditView: View {
                 return
             }
         }
+        SSHKeyStore.setPassword(sshPassword, for: s.name)
         dismiss()
     }
 }

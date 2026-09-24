@@ -18,7 +18,7 @@ struct HelpView: View {
             }
 
             Section {
-                Text("The app signs in with a key, not a password — there is no password field on iPhone, by design. Make a key that belongs to this phone alone, so losing the phone costs you one key and nothing else.")
+                Text("The app signs in with an SSH key or with the server's own password — the same two choices as on the Mac. Password: open the server (Add server or Edit) and fill in Password under SSH. Key (safer): make one that belongs to this phone alone, so losing the phone costs you one key and nothing else.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted(scheme))
 

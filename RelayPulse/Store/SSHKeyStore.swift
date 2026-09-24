@@ -15,6 +15,15 @@ enum SSHKeyStore {
 
     static func clear() { Keychain.delete("sshPrivateKey") }
 
+    /// A server's own login password, for servers the phone has no key on —
+    /// the same choice desktop RelayPulse offers per server. Keychain, keyed by
+    /// server name; FleetStore moves or deletes it with the server.
+    static func password(for server: String) -> String { Keychain.get("sshPassword:" + server) }
+    static func setPassword(_ pw: String, for server: String) {
+        pw.isEmpty ? Keychain.delete("sshPassword:" + server) : Keychain.set(pw, for: "sshPassword:" + server)
+    }
+    static func canLogin(_ server: Server) -> Bool { hasKey || !password(for: server.name).isEmpty }
+
     /// Same comment the website's ssh-keygen line uses, so one `sed` removes
     /// the phone key from a relay however it was made.
     static let comment = "relaypulse-phone"

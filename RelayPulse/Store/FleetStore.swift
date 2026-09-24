@@ -216,6 +216,7 @@ final class FleetStore: ObservableObject {
     func clearConfig() {
         guard !demoMode else { return }
         timer?.cancel(); timer = nil
+        for s in servers { SSHKeyStore.setPassword("", for: s.name) }
         servers = []; statuses = [:]; samples = [:]; lastSweep = nil; relayHosts = []
         ServerStorage.clear()
     }
@@ -262,6 +263,8 @@ final class FleetStore: ObservableObject {
             guard !servers.contains(where: { $0.name == s.name }) else { return false }
             statuses[s.name] = statuses.removeValue(forKey: originalName) ?? RelayStatus(name: s.name)
             samples[s.name] = samples.removeValue(forKey: originalName)
+            SSHKeyStore.setPassword(SSHKeyStore.password(for: originalName), for: s.name)
+            SSHKeyStore.setPassword("", for: originalName)
         }
         servers[idx] = s
         servers.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -270,6 +273,7 @@ final class FleetStore: ObservableObject {
     }
 
     func removeServer(named name: String) {
+        SSHKeyStore.setPassword("", for: name)
         servers.removeAll { $0.name == name }
         statuses.removeValue(forKey: name)
         samples.removeValue(forKey: name)
