@@ -54,7 +54,7 @@ struct ToolsView: View {
                 NavigationLink {
                     HelpView()
                 } label: {
-                    row("Help", "Making an SSH key, what the colours mean, why a server will not connect",
+                    row("Help", "First steps, every setting explained, logging in, what the colours mean",
                         "questionmark.circle", Theme.accent(scheme))
                 }
             }

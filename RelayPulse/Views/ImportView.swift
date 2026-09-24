@@ -10,11 +10,13 @@ struct ImportView: View {
     @State private var pasteText = ""
     @State private var showPaste = false
     @State private var error: String?
+    @State private var showHelp = false
 
     var body: some View {
         NavStack {
+            // Scrolls: with the first-steps card the screen no longer fits an SE.
+            ScrollView {
             VStack(spacing: 22) {
-                Spacer()
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 54))
                     .foregroundStyle(Theme.accent(scheme))
@@ -26,6 +28,21 @@ struct ImportView: View {
                     .foregroundStyle(Theme.muted(scheme))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
+
+                // New users stalled here: an empty screen and no word on what a
+                // server needs. Three steps, the same as Help › First steps.
+                VStack(alignment: .leading, spacing: 8) {
+                    step(1, "Add server: a name and its IP address.")
+                    step(2, "Under SSH, the server's password — or use an SSH key.")
+                    step(3, "Save. It turns green, yellow or red within seconds.")
+                    Button("How it works — every setting explained") { showHelp = true }
+                        .font(.footnote)
+                        .padding(.top, 2)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent(scheme).opacity(0.08)))
+                .padding(.horizontal, 36)
 
                 VStack(spacing: 12) {
                     Button {
@@ -72,10 +89,12 @@ struct ImportView: View {
                     Text(error).font(.footnote).foregroundStyle(.red)
                         .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
-                Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, 40)
+            .frame(maxWidth: .infinity)
+            }
             .background(Theme.bg(scheme))
+            .sheet(isPresented: $showHelp) { NavStack { HelpView() } }
             .sheet(isPresented: $showAdd) { ServerEditView(mode: .add) }
             .fileImporter(isPresented: $showPicker,
                           allowedContentTypes: [.json, .text, .data],
@@ -85,6 +104,13 @@ struct ImportView: View {
             .sheet(isPresented: $showPaste) {
                 PasteSheet(text: $pasteText) { raw in apply(Data(raw.utf8)) }
             }
+        }
+    }
+
+    private func step(_ n: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(n)").font(.caption.weight(.bold)).foregroundStyle(Theme.accent(scheme))
+            Text(text).font(.footnote).foregroundStyle(Theme.text(scheme))
         }
     }
 
