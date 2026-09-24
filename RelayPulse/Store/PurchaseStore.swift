@@ -30,6 +30,10 @@ final class PurchaseStore: ObservableObject {
     }
     @Published private(set) var trialEndsAt: Date?
     @Published private(set) var errorMessage: String?
+    /// Positive result of a restore. Without it a restore on an account that
+    /// already owns Lifetime changed nothing on screen, and the operator took
+    /// the silence for a failure and restored again (2026-09-24).
+    @Published private(set) var infoMessage: String?
 
     private var updatesTask: Task<Void, Never>?
     private var trialExpiryTask: Task<Void, Never>?
@@ -98,10 +102,13 @@ final class PurchaseStore: ObservableObject {
 
     func restorePurchases() async {
         errorMessage = nil
+        infoMessage = nil
         do {
             try await AppStore.sync()
             await refreshEntitlement()
-            if !isEntitled {
+            if isEntitled {
+                infoMessage = "RelayPulse Lifetime is active on this Apple Account."
+            } else {
                 errorMessage = "No previous RelayPulse Lifetime purchase was found."
             }
         } catch StoreKitError.userCancelled {

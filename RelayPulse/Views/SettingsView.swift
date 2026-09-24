@@ -223,6 +223,9 @@ struct SettingsView: View {
                 if let message = purchases.errorMessage {
                     Text(message).font(.caption).foregroundStyle(Theme.err(scheme))
                 }
+                if let message = purchases.infoMessage {
+                    Text(message).font(.caption).foregroundStyle(Theme.ok(scheme))
+                }
             }
 
             Section {

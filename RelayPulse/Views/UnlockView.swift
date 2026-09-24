@@ -45,6 +45,10 @@ struct UnlockView: View {
                     }
                     .disabled(busy || purchases.product == nil)
 
+                    Text("Bought it on your Mac? The same purchase covers iPhone - tap Restore Purchases.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted(scheme))
+                        .multilineTextAlignment(.center)
                     Button("Restore Purchases") {
                         Task { busy = true; await purchases.restorePurchases(); busy = false }
                     }
