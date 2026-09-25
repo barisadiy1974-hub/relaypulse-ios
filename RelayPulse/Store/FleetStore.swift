@@ -76,6 +76,8 @@ final class FleetStore: ObservableObject {
         var repairedToken: String? = nil
         var tokenStale: Bool = false
         var certChanged: Bool = false
+        /// Second reading taken only for Mbps/CPU; never judged as a failure.
+        var rateRead: Bool = false
     }
 
     /// Previous samples for delta calculations (rx/tx bytes, cpu idle/total, timestamp).
@@ -331,13 +333,9 @@ final class FleetStore: ObservableObject {
                 let left = Double(await MainActor.run { self?.pollSec ?? 120 }) - Date().timeIntervalSince(last)
                 if left > 0 { try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000)) }
             }
-            // Mbps and CPU need two readings. After a fresh launch the second one
-            // comes 15 s later instead of a whole interval, so the cards fill in.
-            var followUp = last == nil
             while !Task.isCancelled {
                 await self?.sweep()
-                let secs = followUp ? 15 : await MainActor.run { self?.pollSec ?? 120 }
-                followUp = false
+                let secs = await MainActor.run { self?.pollSec ?? 120 }
                 try? await Task.sleep(nanoseconds: UInt64(secs) * 1_000_000_000)
             }
         }
@@ -471,7 +469,34 @@ final class FleetStore: ObservableObject {
             for await outcome in group {
                 // Store a repaired token first, so the next sweep uses it.
                 if let token = outcome.repairedToken { applyRepairedToken(outcome.name, token) }
-                outcomes.append(outcome)
+                // A reading goes on its card the moment it arrives. Holding them
+                // all until the slowest host answered kept a 144-server list
+                // empty for over a minute when one host was down (agent timeout
+                // plus the SSH try). Failures still wait for the whole sweep:
+                // they are judged together below.
+                if case .success(let m) = outcome.result {
+                    let firstReading = samples[outcome.name] == nil
+                    recordSweepSuccess(outcome, m)
+                    // Mbps and CPU are the difference between two readings. A
+                    // server read for the first time gets its second reading 10 s
+                    // later inside this sweep, so its rates show without waiting
+                    // for the slowest host to time out or for the next interval.
+                    if firstReading, !outcome.rateRead,
+                       var server = targets.first(where: { $0.name == outcome.name }) {
+                        if let token = outcome.repairedToken { server.agentToken = token }
+                        group.addTask {
+                            try? await Task.sleep(nanoseconds: 10_000_000_000)
+                            do {
+                                let m = server.usesAgent ? try await AgentClient.shared.fetch(server)
+                                                         : try await SSHMetrics.shared.fetchDirect(server)
+                                return SweepOutcome(name: server.name, result: .success(m), rateRead: true)
+                            } catch {
+                                return SweepOutcome(name: server.name, result: .failure(error), rateRead: true)
+                            }
+                        }
+                    }
+                }
+                if !outcome.rateRead { outcomes.append(outcome) }
                 addNext()
             }
 
@@ -490,14 +515,8 @@ final class FleetStore: ObservableObject {
 
             for outcome in outcomes {
                 switch outcome.result {
-                case .success(let m):
-                    recordSuccess(outcome.name, m)
-                    // Readings are real — SSH fetched them — but the token could
-                    // not be repaired, so say so rather than showing green.
-                    if outcome.tokenStale && outcome.repairedToken == nil {
-                        markTokenStale(outcome.name)
-                    }
-                    if outcome.certChanged { markCertChanged(outcome.name) }
+                case .success:
+                    break   // already on its card
                 case .failure(let e):
                     // Suppressed, and the fail counter is left alone: our own
                     // outage must not push anyone's relay toward red.
@@ -533,6 +552,14 @@ final class FleetStore: ObservableObject {
     }
 
     // MARK: - Result processing + flap dampening
+
+    private func recordSweepSuccess(_ outcome: SweepOutcome, _ m: AgentMetrics) {
+        recordSuccess(outcome.name, m)
+        // Readings are real — SSH fetched them — but the token could not be
+        // repaired, so say so rather than showing green.
+        if outcome.tokenStale && outcome.repairedToken == nil { markTokenStale(outcome.name) }
+        if outcome.certChanged { markCertChanged(outcome.name) }
+    }
 
     private func recordSuccess(_ name: String, _ m: AgentMetrics) {
         var st = statuses[name] ?? RelayStatus(name: name)
