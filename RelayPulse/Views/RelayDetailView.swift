@@ -150,7 +150,7 @@ struct RelayDetailView: View {
 
     private func run(_ cmd: FixCommand) async {
         do {
-            let r = try await SSHRunner.shared.run(cmd.command, on: server, timeout: 60)
+            let r = try await SSHRunner.shared.run(cmd.script, on: server, timeout: 60)
             let ok = (r.exitStatus ?? 0) == 0
             let text = r.combined.isEmpty ? "(no output)" : r.combined
             AILog.shared.add(kind: .command, relay: server.name, title: cmd.name, detail: text, ok: ok)

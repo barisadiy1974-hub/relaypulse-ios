@@ -6,6 +6,11 @@ struct FixCommand: Codable, Identifiable, Hashable {
     var id: Int
     var name: String
     var command: String
+
+    /// What actually runs: `$WATCHED` becomes the "What counts as up" service
+    /// list, so the default commands act on nginx or docker as readily as on a
+    /// relay. The names are already filtered to systemd-safe characters.
+    var script: String { command.replacingOccurrences(of: "$WATCHED", with: WatchTargets.servicesString) }
 }
 
 /// AI / auto-fix settings. Keys live in Keychain; everything else in UserDefaults.
@@ -59,7 +64,13 @@ final class AppSettings: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: cmdKey),
            let list = try? JSONDecoder().decode([FixCommand].self, from: data),
            !list.isEmpty {
-            return list
+            // Untouched old defaults (relay-only service names) become the
+            // watch-list versions; anything the operator edited stays as is.
+            return list.map { c in
+                guard legacyDefaults[c.id] == c.command,
+                      let fresh = defaultCommands.first(where: { $0.id == c.id }) else { return c }
+                return fresh
+            }
         }
         return defaultCommands
     }
@@ -90,14 +101,23 @@ final class AppSettings: ObservableObject {
         NSLog("AppSettings: AI key seeded from file (provider=\(provider))")
     }
 
-    /// Mirrors Mac src/config.js DEFAULTS.autoFixCommands.
+    /// The relay-only versions these ids shipped with (same as Mac
+    /// src/config.js), recognised so they can be upgraded in place.
+    static let legacyDefaults: [Int: String] = [
+        1: "for svc in anon anon@default anyone anyone-relay tor-anon; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restarted: $svc\" && break; done",
+        2: "for svc in anon anon@default anyone anyone-relay tor-anon; do s=$(systemctl is-active \"$svc\" 2>/dev/null); [ -n \"$s\" ] && echo \"$svc=$s\"; done",
+        3: "journalctl -u anon -n 50 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 50 --no-pager 2>/dev/null || echo \"(log not found)\"",
+    ]
+
+    /// `$WATCHED` = the "What counts as up" services (default: the relay units
+    /// the app always used, so a relay fleet runs exactly what it ran before).
     static let defaultCommands: [FixCommand] = [
-        .init(id: 1, name: "Restart relay service",
-              command: "for svc in anon anon@default anyone anyone-relay tor-anon; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restarted: $svc\" && break; done"),
-        .init(id: 2, name: "Service status",
-              command: "for svc in anon anon@default anyone anyone-relay tor-anon; do s=$(systemctl is-active \"$svc\" 2>/dev/null); [ -n \"$s\" ] && echo \"$svc=$s\"; done"),
+        .init(id: 1, name: "Restart watched service",
+              command: "for svc in $WATCHED; do systemctl cat \"$svc\" >/dev/null 2>&1 && systemctl restart \"$svc\" && echo \"restarted: $svc\" && break; done"),
+        .init(id: 2, name: "Watched service status",
+              command: "for svc in $WATCHED; do s=$(systemctl is-active \"$svc\" 2>/dev/null); [ -n \"$s\" ] && echo \"$svc=$s\"; done"),
         .init(id: 3, name: "Last 50 log lines",
-              command: "journalctl -u anon -n 50 --no-pager 2>/dev/null || journalctl -u anyone-relay -n 50 --no-pager 2>/dev/null || echo \"(log not found)\""),
+              command: "for svc in $WATCHED; do systemctl cat \"$svc\" >/dev/null 2>&1 && { journalctl -u \"$svc\" -u \"$svc@*\" -n 50 --no-pager; exit 0; }; done; echo \"(log not found)\""),
         .init(id: 5, name: "Restart SSH service",
               command: "systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; echo \"ssh=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null)\""),
         .init(id: 12, name: "Disk usage",

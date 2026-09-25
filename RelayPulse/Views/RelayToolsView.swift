@@ -90,7 +90,7 @@ struct RelayToolsView: View {
         running = c.id
         Task {
             do {
-                let r = try await SSHRunner.shared.run(c.command, on: server, timeout: 60)
+                let r = try await SSHRunner.shared.run(c.script, on: server, timeout: 60)
                 let ok = (r.exitStatus ?? 0) == 0
                 let text = r.combined.isEmpty ? "(no output)" : r.combined
                 output = ToolOutput(title: c.name, text: text, failed: !ok)

@@ -115,7 +115,7 @@ struct AISettingsView: View {
             } header: {
                 Text("Fix commands (\(ai.commands.count))")
             } footer: {
-                Text("Same seven defaults as desktop RelayPulse. \"Diagnose with AI\" picks from this list.")
+                Text("\"Diagnose with AI\" picks from this list. $WATCHED stands for the services under Settings › What counts as \"up\", so the defaults work on any server — nginx, docker or a relay.")
             }
         }
         .navigationTitle("AI / Auto-Fix")

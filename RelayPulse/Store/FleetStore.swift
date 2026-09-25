@@ -654,7 +654,7 @@ final class FleetStore: ObservableObject {
               let srv = servers.first(where: { $0.name == req.relay }),
               let cmd = AppSettings.loadCommands().first else { return }
         do {
-            let r = try await SSHRunner.shared.run(cmd.command, on: srv, timeout: 60)
+            let r = try await SSHRunner.shared.run(cmd.script, on: srv, timeout: 60)
             let ok = (r.exitStatus ?? 0) == 0
             let text = r.combined.isEmpty ? "(no output)" : r.combined
             AILog.shared.add(kind: .command, relay: srv.name, title: cmd.name, detail: text, ok: ok)
