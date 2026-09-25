@@ -18,6 +18,11 @@ enum AIFixer {
         var errorDescription: String? {
             switch self {
             case .noKey: return "No API key configured"
+            // The raw body was shown before ("API 401: {\"error\":...") — say what to do.
+            case .http(401, _), .http(403, _):
+                return "The AI provider refused the API key. Check it under Tools › AI API key and commands."
+            case .http(429, _):
+                return "The AI provider is rate-limiting this key, or the account has no credit left. Try again later or check the account."
             case .http(let c, let b): return "API \(c): \(b.prefix(200))"
             case .badResponse(let m): return "Could not read response: \(m)"
             }
@@ -44,7 +49,8 @@ enum AIFixer {
         guard !key.isEmpty else { throw AIError.noKey }
         let list = commands.map { "id=\($0.id) name=\"\($0.name)\"" }.joined(separator: "\n")
         let prompt = """
-        You are a Linux server management assistant monitoring Anyone Network relay servers.
+        You are a Linux server management assistant. The server may run anything — a web or
+        database server, containers, or an Anyone/Tor relay; tell which from the logs.
         Reply ONLY with JSON, nothing else.
 
         Server: \(server.name) (\(server.host))
