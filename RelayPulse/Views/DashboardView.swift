@@ -142,7 +142,7 @@ struct DashboardView: View {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
                 }
             }
-            .refreshable { await fleet.sweep() }
+            .refreshable { await fleet.refreshNow() }
             .sheet(isPresented: $showAdd) {
                 ServerEditView(mode: .add)
             }

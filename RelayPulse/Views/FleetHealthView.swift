@@ -104,7 +104,7 @@ struct FleetHealthView: View {
             }
             .background(Theme.bg(scheme))
             .navigationTitle("Fleet Health")
-            .refreshable { await fleet.sweep() }
+            .refreshable { await fleet.refreshNow() }
         }
     }
 

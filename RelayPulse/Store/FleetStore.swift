@@ -323,9 +323,21 @@ final class FleetStore: ObservableObject {
         guard !demoMode else { applyDemoMode(); return }
         guard timer == nil, isConfigured else { return }
         timer = Task { [weak self] in
+            // Back from the background is not a reason to reconnect to the whole
+            // fleet: wait out what is left of the interval. A fresh launch has no
+            // last sweep and reads at once (asked for 2026-09-25).
+            let last = await MainActor.run { self?.lastSweep }
+            if let last {
+                let left = Double(await MainActor.run { self?.pollSec ?? 120 }) - Date().timeIntervalSince(last)
+                if left > 0 { try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000)) }
+            }
+            // Mbps and CPU need two readings. After a fresh launch the second one
+            // comes 15 s later instead of a whole interval, so the cards fill in.
+            var followUp = last == nil
             while !Task.isCancelled {
                 await self?.sweep()
-                let secs = await MainActor.run { self?.pollSec ?? 120 }
+                let secs = followUp ? 15 : await MainActor.run { self?.pollSec ?? 120 }
+                followUp = false
                 try? await Task.sleep(nanoseconds: UInt64(secs) * 1_000_000_000)
             }
         }
@@ -337,6 +349,14 @@ final class FleetStore: ObservableObject {
 
     func sweep() async {
         await sweep(monitoredServers)
+    }
+
+    /// Pull-to-refresh. SwiftUI cancels a `.refreshable` task when the view
+    /// redraws, which it does the moment a sweep starts; the cancelled requests
+    /// then all failed together and read as "network problem here". Running the
+    /// sweep as its own task lets it finish.
+    func refreshNow() async {
+        await Task { await sweep() }.value
     }
 
     /// iOS arka plan yenilemesi en fazla kisa bir calisma suresi verir. Tum
@@ -462,7 +482,11 @@ final class FleetStore: ObservableObject {
             // alarms while every relay was up. Recording those failures would
             // march healthy relays to red and wake the operator for nothing.
             let failed = outcomes.filter { if case .failure = $0.result { return true }; return false }.count
-            networkSuspect = FleetStore.fleetWideFailure(failed: failed, total: outcomes.count)
+            // A cancelled sweep (app sent to the background, refresh cut short)
+            // fails its open requests on purpose: that says nothing about the
+            // network or the servers, so it judges and records nothing.
+            let cancelled = Task.isCancelled
+            if !cancelled { networkSuspect = FleetStore.fleetWideFailure(failed: failed, total: outcomes.count) }
 
             for outcome in outcomes {
                 switch outcome.result {
@@ -477,7 +501,7 @@ final class FleetStore: ObservableObject {
                 case .failure(let e):
                     // Suppressed, and the fail counter is left alone: our own
                     // outage must not push anyone's relay toward red.
-                    guard !networkSuspect else { continue }
+                    guard !networkSuspect, !cancelled else { continue }
                     recordFailure(outcome.name, e)
                     // One more try before the card turns red and the phone
                     // rings. Measured 2026-09-14 on a 140-relay fleet: every

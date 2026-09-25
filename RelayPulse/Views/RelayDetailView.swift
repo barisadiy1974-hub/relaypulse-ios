@@ -111,7 +111,7 @@ struct RelayDetailView: View {
                 Text(s.reason.isEmpty ? "The model did not suggest a command." : s.reason)
             }
         }
-        .refreshable { await fleet.sweep() }
+        .refreshable { await fleet.refreshNow() }
     }
 
     /// Rate metrics need two polls to produce a delta; say so instead of showing a bare dash.
