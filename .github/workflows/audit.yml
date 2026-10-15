@@ -25,3 +25,9 @@ jobs:
           swiftc -Onone -o /tmp/rp-certpin \
             RelayPulse/Net/CertPin.swift scripts/certpin-selfcheck.swift
           /tmp/rp-certpin
+      - name: Fleet logic (range search, instances)
+        run: |
+          swiftc -Onone -o /tmp/rp-fleet \
+            RelayPulse/Models/RelayQuery.swift RelayPulse/Models/Server.swift \
+            RelayPulse/Models/AgentMetrics.swift scripts/fleet-selfcheck.swift
+          /tmp/rp-fleet
