@@ -30,3 +30,25 @@ jobs:
       - name: Errors
         if: failure()
         run: grep -E "error:" /tmp/build.log | sort -u | head -80
+      - name: UI test with screenshots (iOS Simulator)
+        run: |
+          DEV=$(xcrun simctl list devices available | grep -m1 -oE "iPhone 1[5-7][^(]*" | sed 's/ *$//')
+          echo "simulator: $DEV"
+          set -o pipefail
+          xcodebuild -project RelayPulse.xcodeproj -scheme RelayPulse \
+            -configuration Debug -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,name=$DEV" \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | tee /tmp/test.log | grep -E "error:|Test Case|XCTAssert|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" /tmp/test.log
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ~/rp-shots
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Test log
+        if: failure()
+        run: grep -E "error|failed|XCTAssert|Test Case" /tmp/test.log | head -60 || true

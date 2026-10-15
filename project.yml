@@ -43,6 +43,8 @@ schemes:
       storeKitConfiguration: RelayPulse.storekit
     test:
       config: Debug
+      targets:
+        - RelayPulseUITests
     profile:
       config: Release
     analyze:
@@ -97,3 +99,17 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         TARGETED_DEVICE_FAMILY: "1"
+
+  RelayPulseUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: RelayPulseUITests
+    dependencies:
+      - target: RelayPulse
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.baris.relaypulse.uitests
+        TARGETED_DEVICE_FAMILY: "1"
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
