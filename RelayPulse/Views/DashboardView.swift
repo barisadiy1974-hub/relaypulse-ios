@@ -16,11 +16,11 @@ struct DashboardView: View {
     private var visible: [Server] {
         // Only the monitored slice: showing a card whose numbers are never
         // refreshed would read as a broken relay rather than a paywalled one.
-        fleet.monitoredServers.filter { s in
+        // "10-25" keeps relays 10 to 25 (RelayQuery); plain text as before.
+        let search = RelayQuery(query)
+        return fleet.monitoredServers.filter { s in
             let st = fleet.status(for: s)
-            let q = query.isEmpty
-                || s.name.localizedCaseInsensitiveContains(query)
-                || s.host.localizedCaseInsensitiveContains(query)
+            let q = search.matches(name: s.name, host: s.host)
             let f: Bool = {
                 switch filter {
                 case .all: return true
@@ -30,6 +30,9 @@ struct DashboardView: View {
             }()
             return q && f
         }
+        // Name order, numbers counted as numbers: Barisfreak2 before Barisfreak10
+        // (the desktop's settings list and the Android app sort the same way).
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     var body: some View {
@@ -132,7 +135,7 @@ struct DashboardView: View {
                 .padding(.top, 6)
             }
             .background(Theme.bg(scheme))
-            .searchable(text: $query, prompt: "Search server or IP")
+            .searchable(text: $query, prompt: "Name, IP or range like 10-25")
             .navigationTitle("Servers (\(fleet.servers.count))")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

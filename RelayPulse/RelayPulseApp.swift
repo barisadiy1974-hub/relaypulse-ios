@@ -102,6 +102,8 @@ struct RelayPulseApp: App {
     @StateObject private var fleet = FleetStore.shared
     @StateObject private var ai = AppSettings()
     @Environment(\.scenePhase) private var scenePhase
+    /// Settings › Appearance: "auto" follows the phone, "light" / "dark" override it.
+    @AppStorage("appearance") private var appearance = "auto"
 
     var body: some Scene {
         WindowGroup {
@@ -109,6 +111,7 @@ struct RelayPulseApp: App {
                 .environmentObject(fleet)
                 .environmentObject(ai)
                 .tint(Color(.sRGB, red: 0.184, green: 0.49, blue: 0.965)) // matches Mac --accent
+                .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
                 .task {
                     SSHKeyStore.importSeedFileIfPresent()
                     ai.importSeedKeyIfPresent()

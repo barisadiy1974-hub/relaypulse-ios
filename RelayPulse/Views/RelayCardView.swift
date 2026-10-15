@@ -31,6 +31,14 @@ struct RelayCardView: View {
                     Text(server.host)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted(scheme))
+                    // The operator's own label from the desktop export (e.g. the
+                    // hosting provider), as on the desktop and Android cards.
+                    if !server.note.isEmpty {
+                        Text(server.note)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.muted(scheme))
+                            .lineLimit(1)
+                    }
                     Spacer()
                     Text(status.ageText)
                         .font(.system(size: 11))

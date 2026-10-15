@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject var fleet: FleetStore
     @Environment(\.colorScheme) private var scheme
     @State private var showPicker = false
+    @AppStorage("appearance") private var appearance = "auto"
     @State private var showAdd = false
     @State private var editing: Server?
     @State private var showClearConfirm = false
@@ -132,6 +133,17 @@ struct SettingsView: View {
                     .font(.footnote).foregroundStyle(Theme.muted(scheme))
             } header: {
                 Text("Try it out")
+            }
+
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance) {
+                    Text("Auto").tag("auto")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }
+                .pickerStyle(.segmented)
+                Text("Auto follows the phone's light or dark setting.")
+                    .font(.footnote).foregroundStyle(Theme.muted(scheme))
             }
 
             Section("Monitoring") {

@@ -31,10 +31,17 @@ struct FleetHealthView: View {
     private var ramHot: [(Server, RelayStatus)] { rows.filter { ($0.1.memPct ?? 0) >= 90 }.sorted { ($0.1.memPct ?? 0) > ($1.1.memPct ?? 0) } }
     private var diskHot: [(Server, RelayStatus)] { rows.filter { ($0.1.diskPct ?? 0) >= 85 }.sorted { ($0.1.diskPct ?? 0) > ($1.1.diskPct ?? 0) } }
     private var cpuHot: [(Server, RelayStatus)] { rows.filter { ($0.1.cpuPct ?? 0) >= 80 }.sorted { ($0.1.cpuPct ?? 0) > ($1.1.cpuPct ?? 0) } }
+    // Split into a typed helper: Xcode 16's type checker gave up on the
+    // one-expression version ("unable to type-check in reasonable time").
+    private static func traffic(_ st: RelayStatus) -> Double {
+        let rx: Double = st.rxMbps ?? 0
+        let tx: Double = st.txMbps ?? 0
+        return rx + tx
+    }
     private var busiest: [(Server, RelayStatus)] {
-        rows.filter { ($0.1.rxMbps ?? 0) + ($0.1.txMbps ?? 0) > 0 }
-            .sorted { (($0.1.rxMbps ?? 0) + ($0.1.txMbps ?? 0)) > (($1.1.rxMbps ?? 0) + ($1.1.txMbps ?? 0)) }
-            .prefix(5).map { $0 }
+        let moving: [(Server, RelayStatus)] = rows.filter { FleetHealthView.traffic($0.1) > 0 }
+        let sorted: [(Server, RelayStatus)] = moving.sorted { FleetHealthView.traffic($0.1) > FleetHealthView.traffic($1.1) }
+        return Array(sorted.prefix(5))
     }
     private var totalConn: Int { rows.compactMap { $0.1.conn }.reduce(0, +) }
     private var avgMem: Double? {

@@ -404,6 +404,10 @@ final class FleetStore: ObservableObject {
         let critical = Set(targets
             .filter { (statuses[$0.name]?.fails ?? 0) + 1 >= offlineAfter }
             .map(\.name))
+        // Instance cards (relay 2..16 of a box) and the box row that has the
+        // agent, worked out here for the same reason as `critical`.
+        let sources = Dictionary(targets.compactMap { s in agentSource(for: s).map { (s.name, $0) } },
+                                 uniquingKeysWith: { first, _ in first })
         // On a 403 the token is repaired over SSH and the fetch retried, the way
         // desktop RelayPulse has always done it (monitor.js). `repairedToken`
         // carries the new value back so it can be stored; `tokenStale` marks the
@@ -418,13 +422,15 @@ final class FleetStore: ObservableObject {
             func addNext() {
                 guard let s = iterator.next() else { return }
                 let isCritical = critical.contains(s.name)
+                let src = sources[s.name]
                 group.addTask {
-                    // No agent on this server: SSH is the reading, not a fallback.
+                    // No agent of its own (an instance card, or a server without
+                    // an agent): its box's agent when that is v2, else SSH.
                     if !s.usesAgent {
-                        do { return SweepOutcome(name: s.name, result: .success(try await SSHMetrics.shared.fetchDirect(s))) }
+                        do { return SweepOutcome(name: s.name, result: .success(try await FleetStore.readOnce(s, source: src))) }
                         catch { return SweepOutcome(name: s.name, result: .failure(error)) }
                     }
-                    do { return SweepOutcome(name: s.name, result: .success(try await AgentClient.shared.fetch(s))) }
+                    do { return SweepOutcome(name: s.name, result: .success(try await FleetStore.readOnce(s, source: nil))) }
                     catch {
                         var tokenStale = false
                         // A refused certificate pin must not vanish just because
@@ -443,7 +449,7 @@ final class FleetStore: ObservableObject {
                                 var repaired = s
                                 repaired.agentToken = fixed
                                 if let m = try? await AgentClient.shared.fetch(repaired) {
-                                    return SweepOutcome(name: s.name, result: .success(m),
+                                    return SweepOutcome(name: s.name, result: .success(m.ownOf(s.agentInstanceKey)),
                                                         repairedToken: fixed)
                                 }
                             }
@@ -484,11 +490,13 @@ final class FleetStore: ObservableObject {
                     if firstReading, !outcome.rateRead,
                        var server = targets.first(where: { $0.name == outcome.name }) {
                         if let token = outcome.repairedToken { server.agentToken = token }
+                        let rateServer = server
+                        let rateSrc = sources[server.name]
                         group.addTask {
                             try? await Task.sleep(nanoseconds: 10_000_000_000)
+                            let server = rateServer
                             do {
-                                let m = server.usesAgent ? try await AgentClient.shared.fetch(server)
-                                                         : try await SSHMetrics.shared.fetchDirect(server)
+                                let m = try await FleetStore.readOnce(server, source: rateSrc)
                                 return SweepOutcome(name: server.name, result: .success(m), rateRead: true)
                             } catch {
                                 return SweepOutcome(name: server.name, result: .failure(error), rateRead: true)
@@ -529,13 +537,42 @@ final class FleetStore: ObservableObject {
                     // request; a false alarm costs the operator's sleep.
                     if statuses[outcome.name]?.state == .offline,
                        let server = targets.first(where: { $0.name == outcome.name }),
-                       let m = try? await AgentClient.shared.fetch(server) {
+                       let m = try? await FleetStore.readOnce(server, source: sources[server.name]) {
                         recordSuccess(outcome.name, m)
                     }
                 }
             }
         }
         lastSweep = Date()
+    }
+
+    /// The row whose agent reads this card's box: itself when it has an agent
+    /// of its own, else another row on the same host that has one. Nil = SSH.
+    private func agentSource(for s: Server) -> Server? {
+        guard !s.usesAgent else { return nil }
+        if s.agentPort > 0 && !s.agentToken.isEmpty {
+            var own = s
+            own.instance = ""
+            return own
+        }
+        let host = s.host.trimmingCharacters(in: .whitespaces)
+        return servers.first { $0.name != s.name && $0.usesAgent && !$0.agentToken.isEmpty
+            && $0.host.trimmingCharacters(in: .whitespaces) == host }
+    }
+
+    /// One reading of a card. A box with agent.py v2 answers for all of its
+    /// relays at once (BoxReadings shares that answer between the cards); an
+    /// instance card on a box without one is read over SSH. Runs off the main actor.
+    nonisolated static func readOnce(_ s: Server, source: Server?) async throws -> AgentMetrics {
+        if s.usesAgent {
+            return try await BoxReadings.shared.reading(s).ownOf(s.agentInstanceKey)
+        }
+        if let src = source,
+           let box = try? await BoxReadings.shared.reading(src),
+           let one = box.forInstance(s.agentInstanceKey) {
+            return one
+        }
+        return try await SSHMetrics.shared.fetchDirect(s)
     }
 
     /// True when so much of one sweep failed that the network here is the

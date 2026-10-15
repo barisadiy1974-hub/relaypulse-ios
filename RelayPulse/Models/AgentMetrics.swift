@@ -24,6 +24,50 @@ struct AgentMetrics: Decodable {
     var anon: Anon?
     var uptime: String?
     var publicIp: String?
+    /// 2 from agent.py v2 on; nil from v1.
+    var agentVersion: Int?
+    /// agent.py v2: every relay of the box, keyed like Server.agentInstanceKey
+    /// ("" first relay, "2" for anon2 / anonrc-2, NAME for anon@NAME).
+    var instances: [String: Instance]?
+
+    struct Instance: Decodable {
+        var unit: String?
+        var nickname: String?
+        var fingerprint: String?
+        var services: [String: String]?
+        var ports: [String]?
+        var conn: Double?
+    }
+
+    /// This box's reading narrowed to one of its relays (agent.py v2): its own
+    /// unit state, ports and connections; CPU / RAM / disk / traffic stay the
+    /// box's. Nil when the agent does not report that relay (v1, or no such relay).
+    func forInstance(_ key: String) -> AgentMetrics? {
+        guard let i = instances?[key] else { return nil }
+        let services = i.services ?? [:]
+        let ports = i.ports ?? []
+        let states = services.values.map { $0.lowercased() }
+        // Same rule as desktop anonStateFrom: a port counts only while no unit state is known.
+        let active: String
+        if states.contains(where: { $0 == "active" || $0 == "activating" }) {
+            active = "active"
+        } else if states.isEmpty {
+            active = ports.isEmpty ? "unknown" : "active"
+        } else {
+            active = states.first(where: { !$0.isEmpty && $0 != "active" }) ?? "inactive"
+        }
+        var m = self
+        m.conn = i.conn ?? 0
+        m.anon = Anon(active: active, ports: ports, services: services)
+        return m
+    }
+
+    /// A box with several relays: the given relay's own unit, ports and
+    /// connections; a single-relay box's reading as it is.
+    func ownOf(_ key: String) -> AgentMetrics {
+        guard (instances?.count ?? 0) > 1 else { return self }
+        return forInstance(key) ?? self
+    }
 
     /// True when a watched unit that exists on the host belongs to relay software.
     /// Only units that exist are reported (agent.py skips not-found ones), and an
