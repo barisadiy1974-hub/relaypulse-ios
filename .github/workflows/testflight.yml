@@ -1,5 +1,6 @@
 # Builds, signs and uploads the app to App Store Connect (TestFlight) from a
-# cloud Mac. Run by hand: Actions > TestFlight > Run workflow. Nothing goes to
+# cloud Mac. Started by pushing a tag testflight-<version>-<build> (or by hand
+# from Actions once this file is on main). Nothing goes to
 # App Review: the build lands in TestFlight, where internal testers (the
 # account owner) install it. Submitting for review stays a separate, manual
 # step in App Store Connect.
@@ -14,6 +15,8 @@ name: TestFlight
 
 on:
   workflow_dispatch:
+  push:
+    tags: ["testflight-*"]
 
 jobs:
   upload:
