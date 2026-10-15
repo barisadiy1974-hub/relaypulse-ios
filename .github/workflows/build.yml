@@ -1,0 +1,32 @@
+# Compile check on a cloud Mac: generates the Xcode project from project.yml
+# and builds the app for the iOS Simulator without signing. No certificate,
+# no upload; it only tells whether the code compiles (the app is written on
+# a Windows PC, where Swift for iOS cannot be built).
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build (iOS Simulator, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project RelayPulse.xcodeproj -scheme RelayPulse \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee /tmp/build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" /tmp/build.log
+      - name: Errors
+        if: failure()
+        run: grep -E "error:" /tmp/build.log | sort -u | head -80
